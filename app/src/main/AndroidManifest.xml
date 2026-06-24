@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
+  <uses-feature
+    android:name="android.hardware.camera"
+    android:required="false" />
+  <uses-feature
+    android:name="android.hardware.camera.autofocus"
+    android:required="false" />
+
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+  </queries>
+
+  <application
+    android:name=".RikkaHubApp"
+    android:largeHeap="true"
+    android:allowBackup="true"
+    android:appCategory="productivity"
+    android:dataExtractionRules="@xml/data_extraction_rules"
+    android:enableOnBackInvokedCallback="true"
+    android:fullBackupContent="@xml/backup_rules"
+    android:icon="@mipmap/ic_launcher"
+    android:label="@string/app_name"
+    android:supportsRtl="true"
+    android:theme="@style/Theme.Rikkahub"
+    android:usesCleartextTraffic="true"
+    tools:targetApi="33">
+    <activity
+      android:name=".ui.activity.SafeModeActivity"
+      android:exported="false"
+      android:label="@string/title_activity_safe_mode"
+      android:theme="@style/Theme.Rikkahub" />
+    <activity
+      android:name=".RouteActivity"
+      android:configChanges="keyboardHidden|orientation|screenSize"
+      android:exported="true"
+      android:importantForAutofill="noExcludeDescendants"
+      android:theme="@style/Theme.Rikkahub"
+      android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.PROCESS_TEXT" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+
+      <meta-data
+        android:name="android.app.shortcuts"
+        android:resource="@xml/shortcuts" />
+    </activity>
+    <activity
+      android:name=".ui.activity.ShortcutHandlerActivity"
+      android:exported="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+
+        <data
+          android:host="shortcut"
+          android:scheme="rikkahub" />
+      </intent-filter>
+    </activity>
+    <activity
+      android:name="com.yalantis.ucrop.UCropActivity"
+      android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+    <service
+      android:name=".service.WebServerService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="local web server for LLM chat UI" />
+    </service>
+
+    <service
+      android:name=".service.UsageReminderService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="usage reminder monitor" />
+    </service>
+
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.fileprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" />
+    </provider>
+    <provider
+      android:name="androidx.startup.InitializationProvider"
+      android:authorities="${applicationId}.androidx-startup"
+      android:exported="false"
+      tools:node="merge">
+      <meta-data
+        android:name="androidx.work.WorkManagerInitializer"
+        android:value="androidx.startup"
+        tools:node="remove" />
+    </provider>
+  </application>
+
+</manifest>

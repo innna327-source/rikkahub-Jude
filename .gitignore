@@ -1,0 +1,20 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+usage-tracker/build/
+weather/build/
+/captures
+.externalNativeBuild
+.cxx
+
+# Local/private files excluded from public repositories
+**/build/
+/.claude/settings.local.json
+/skill-mcp正文.docx
+local.properties
+.cursor
+.history
+.kotlin
