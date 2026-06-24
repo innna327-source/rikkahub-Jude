@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub</h1>
+  <h1>RikkaHub Auto Compress</h1>
 
   [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
   [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
@@ -13,16 +13,45 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
+> [!IMPORTANT]
+> This is an **unofficial community fork** of [RikkaHub](https://github.com/rikkahub/rikkahub),
+> focused on automatic rolling summaries and context compression. It is not an official RikkaHub release.
+> The current public source is based on the RikkaHub `2.2.5` code line, with selected later fixes and the fork changes below.
+> The version shown on the [Releases page](https://github.com/innna327-source/rikkahub-auto-compress/releases)
+> is the source of truth for downloadable builds.
+
 <div align="center">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
 
-## 🚀 Download
+## 🚀 Download this fork
 
-🔗 [Download from Website](https://rikka-ai.com/download)
+🔗 **[Download APK from GitHub Releases](https://github.com/innna327-source/rikkahub-auto-compress/releases)**
 
-🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+Do not use **Code → Download ZIP** if you only want to install the app; that downloads source code, not an APK.
+
+The currently published package is an `arm64-v8a` debug APK. Back up your data before installation. Because this
+fork and the official app may use different signing certificates, Android might not allow installing one directly
+over the other. If Android reports a signature conflict, export a backup before uninstalling any existing version.
+
+For official builds, visit the [upstream RikkaHub project](https://github.com/rikkahub/rikkahub).
+
+## 🌿 Changes in this fork
+
+- **Automatic rolling summaries and context compression**: keep recent messages while continuously compressing
+  older visible history, with editable summaries and configurable target length.
+- **Long-conversation chunking**: large histories and existing summaries are compressed in bounded chunks instead
+  of being sent as one oversized request.
+- **Dedicated compression API and model**: optionally use a separate OpenAI-compatible endpoint, API key, model,
+  Chat Completions path, or Responses API for compression.
+- **Dedicated OCR API and model**: OCR can use its own OpenAI-compatible endpoint and model without changing the
+  normal chat provider.
+- **Paragraph-level TTS controls**: play assistant replies paragraph by paragraph, with quoted-text-only,
+  English-only, and automatic playback options.
+- **Usage statistics and reminders**: local app-usage views and configurable duration reminders.
+
+Unless a release note says otherwise, this fork retains the upstream RikkaHub features listed below.
 
 ## 💖 Sponsors
 

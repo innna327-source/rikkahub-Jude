@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App 图标" width="100" />
-  <h1>RikkaHub</h1>
+  <h1>RikkaHub Auto Compress</h1>
 
 一个原生Android LLM 聊天客户端，支持切换不同的供应商进行聊天 🤖💬
 
@@ -10,6 +10,9 @@
 
 </div>
 
+> [!IMPORTANT]
+> 这是基于 [RikkaHub](https://github.com/rikkahub/rikkahub) 的**非官方二次开发版本**，当前公开源码基于 RikkaHub `2.2.5` 代码线，并合入部分后续修复及下述二创功能；本项目不代表 RikkaHub 官方版本。具体可下载版本以本仓库的 [Releases](https://github.com/innna327-source/rikkahub-auto-compress/releases) 页面为准。
+
 <div align="center">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
@@ -18,8 +21,24 @@
 
 ## 🚀 下载
 
-🔗 [前往官网下载](https://rikka-ai.com/download)
-🔗 [前往 Google Play 下载](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+🔗 **[前往 GitHub Releases 下载 APK](https://github.com/innna327-source/rikkahub-auto-compress/releases)**
+
+如果只是安装应用，请不要点击 `Code → Download ZIP`，那里下载的是源代码，不是 APK。
+
+当前发布包为 `arm64-v8a` Debug APK。安装前请先备份应用数据。由于本二创版本与官方版本可能使用不同签名，Android 可能不允许直接覆盖安装；若提示签名冲突，请务必先在原应用内导出备份，再考虑卸载旧版本。
+
+需要官方版本时，请前往 [RikkaHub 上游项目](https://github.com/rikkahub/rikkahub)。
+
+## 🌿 本二创主要新增功能
+
+- **自动滚动摘要与上下文压缩**：保留最近消息，自动压缩较早的可见对话；摘要可查看、编辑，并可设置目标长度。
+- **长对话分块压缩**：超长历史和已有摘要会按容量分块处理，避免一次请求塞入过多内容。
+- **独立压缩 API 与模型**：压缩任务可单独配置 OpenAI 兼容地址、API Key、模型、Chat Completions 路径或 Responses API，不占用普通聊天模型配置。
+- **独立 OCR API 与模型**：OCR 可以使用单独的 OpenAI 兼容接口和模型，不影响正常聊天提供商。
+- **分段 TTS 播放**：支持按段落朗读回复，并提供仅朗读引用、仅朗读英文和生成后自动播放等选项。
+- **使用统计与提醒**：提供本地应用使用统计和可配置的使用时长提醒。
+
+除 Release 说明特别标注外，本版本仍保留下面列出的 RikkaHub 上游功能。
 
 
 ## 💖 赞助商
