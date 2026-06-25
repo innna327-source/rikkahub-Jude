@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.data.sync.webdav
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import me.rerere.rikkahub.data.db.APP_DATABASE_VERSION
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.datastore.Settings
@@ -20,6 +22,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
@@ -216,6 +219,10 @@ class WebDavSync(
     private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = withContext(Dispatchers.IO) {
         Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
 
+        if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
+            validateBackupDatabaseVersion(backupFile)
+        }
+
         ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
             var entry: ZipEntry?
             while (zipIn.nextEntry.also { entry = it } != null) {
@@ -333,6 +340,62 @@ class WebDavSync(
         }
 
         Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
+    }
+
+    private fun validateBackupDatabaseVersion(backupFile: File) {
+        ZipFile(backupFile).use { zipFile ->
+            val dbEntry = zipFile.getEntry("rikka_hub.db") ?: return
+            val tempDb = File.createTempFile("rikka_hub_restore_check_", ".db", context.cacheDir)
+            val tempWal = File("${tempDb.absolutePath}-wal")
+            val tempShm = File("${tempDb.absolutePath}-shm")
+            try {
+                zipFile.extractEntryTo(dbEntry, tempDb)
+                zipFile.getEntry("rikka_hub-wal")?.let { zipFile.extractEntryTo(it, tempWal) }
+                zipFile.getEntry("rikka_hub-shm")?.let { zipFile.extractEntryTo(it, tempShm) }
+
+                val backupVersion = readDatabaseVersion(tempDb)
+                Log.i(
+                    TAG,
+                    "validateBackupDatabaseVersion: backup=$backupVersion, supported=$APP_DATABASE_VERSION"
+                )
+                if (backupVersion > APP_DATABASE_VERSION) {
+                    throw Exception(
+                        "备份数据库版本 $backupVersion 高于当前支持版本 $APP_DATABASE_VERSION，请先更新应用后再恢复。"
+                    )
+                }
+            } finally {
+                if (tempDb.exists()) {
+                    tempDb.delete()
+                }
+                if (tempWal.exists()) {
+                    tempWal.delete()
+                }
+                if (tempShm.exists()) {
+                    tempShm.delete()
+                }
+            }
+        }
+    }
+
+    private fun ZipFile.extractEntryTo(entry: ZipEntry, file: File) {
+        getInputStream(entry).use { inputStream ->
+            FileOutputStream(file).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+    }
+
+    private fun readDatabaseVersion(dbFile: File): Int {
+        val database = SQLiteDatabase.openDatabase(
+            dbFile.absolutePath,
+            null,
+            SQLiteDatabase.OPEN_READONLY,
+        )
+        return try {
+            database.version
+        } finally {
+            database.close()
+        }
     }
 
     private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryName: String) {
