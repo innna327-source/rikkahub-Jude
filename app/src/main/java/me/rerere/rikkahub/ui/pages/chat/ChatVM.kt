@@ -91,6 +91,18 @@ class ChatVM(
 
         // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
+
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                if (settings.displaySetting.showUpdates) {
+                    settings
+                } else {
+                    settings.copy(
+                        displaySetting = settings.displaySetting.copy(showUpdates = true)
+                    )
+                }
+            }
+        }
     }
 
     override fun onCleared() {

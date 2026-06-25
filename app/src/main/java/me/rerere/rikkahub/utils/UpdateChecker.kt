@@ -11,13 +11,16 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.Locale
 
-private const val API_URL = "https://updates.rikka-ai.com/"
+private const val API_URL = "https://api.github.com/repos/innna327-source/rikkahub-auto-compress/releases/latest"
+private const val UPDATE_ASSET_NAME = "app-arm64-v8a-debug.apk"
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -38,7 +41,7 @@ class UpdateChecker(private val client: OkHttpClient) {
                             .build()
                     ).await()
                     if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
+                        json.decodeFromString<GithubRelease>(response.body.string()).toUpdateInfo()
                     } else {
                         throw Exception("Failed to fetch update info")
                     }
@@ -92,6 +95,57 @@ data class UpdateInfo(
     val downloads: List<UpdateDownload>
 )
 
+@Serializable
+private data class GithubRelease(
+    @SerialName("tag_name")
+    val tagName: String,
+    @SerialName("published_at")
+    val publishedAt: String,
+    val body: String? = null,
+    val assets: List<GithubReleaseAsset> = emptyList(),
+)
+
+@Serializable
+private data class GithubReleaseAsset(
+    val name: String,
+    @SerialName("browser_download_url")
+    val browserDownloadUrl: String,
+    val size: Long = 0L,
+)
+
+private fun GithubRelease.toUpdateInfo(): UpdateInfo {
+    val asset = assets.firstOrNull { it.name == UPDATE_ASSET_NAME }
+        ?: error("Update asset not found: $UPDATE_ASSET_NAME")
+    return UpdateInfo(
+        version = tagName.removePrefix("v"),
+        publishedAt = publishedAt,
+        changelog = body?.takeIf { it.isNotBlank() } ?: "No changelog provided.",
+        downloads = listOf(
+            UpdateDownload(
+                name = asset.name,
+                url = asset.browserDownloadUrl,
+                size = formatBytes(asset.size),
+            )
+        ),
+    )
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return ""
+    val units = listOf("B", "KB", "MB", "GB")
+    var value = bytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024.0 && unitIndex < units.lastIndex) {
+        value /= 1024.0
+        unitIndex++
+    }
+    return if (unitIndex == 0) {
+        "${bytes} ${units[unitIndex]}"
+    } else {
+        "%.1f %s".format(Locale.US, value, units[unitIndex])
+    }
+}
+
 /**
  * 版本号值类，封装版本号字符串并提供比较功能
  *
@@ -106,7 +160,7 @@ value class Version(val value: String) : Comparable<Version> {
 
     private fun parse(): ParsedVersion {
         // 去掉 build metadata（+号后面的部分）
-        val withoutBuild = value.split("+").first()
+        val withoutBuild = value.trim().removePrefix("v").removePrefix("V").split("+").first()
         // 分离主版本号和预发布标识符
         val hyphenIndex = withoutBuild.indexOf('-')
         val (coreStr, prereleaseStr) = if (hyphenIndex >= 0) {
