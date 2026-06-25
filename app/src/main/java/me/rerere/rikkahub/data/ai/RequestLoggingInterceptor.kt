@@ -8,10 +8,6 @@ import okio.Buffer
 
 class RequestLoggingInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        if (!Logging.isRequestLoggingEnabled()) {
-            return chain.proceed(chain.request())
-        }
-
         val request = chain.request()
         val startTime = System.currentTimeMillis()
 

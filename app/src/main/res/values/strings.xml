@@ -1117,7 +1117,5 @@
   <string name="web_search_enabled">Web search enabled</string>
   <string name="setting_theme_page_delete_theme_title">Delete Theme</string>
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
-  <string name="log_page_record_requests">Record requests</string>
-  <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
 </resources>
 

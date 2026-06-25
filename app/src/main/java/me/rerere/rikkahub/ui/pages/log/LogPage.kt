@@ -21,7 +21,6 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -33,13 +32,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
-import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -52,7 +49,6 @@ import java.util.Locale
 @Composable
 fun LogPage() {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
-    var requestLoggingEnabled by remember { mutableStateOf(Logging.isRequestLoggingEnabled()) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -79,11 +75,6 @@ fun LogPage() {
     ) { contentPadding ->
         UnifiedLogList(
             logs = logs,
-            requestLoggingEnabled = requestLoggingEnabled,
-            onRequestLoggingChange = {
-                requestLoggingEnabled = it
-                Logging.setRequestLoggingEnabled(it)
-            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
@@ -94,8 +85,6 @@ fun LogPage() {
 @Composable
 private fun UnifiedLogList(
     logs: List<LogEntry>,
-    requestLoggingEnabled: Boolean,
-    onRequestLoggingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedLog by remember { mutableStateOf<LogEntry.RequestLog?>(null) }
@@ -108,13 +97,6 @@ private fun UnifiedLogList(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(16.dp)
     ) {
-        item {
-            RequestLoggingSwitchCard(
-                enabled = requestLoggingEnabled,
-                onEnabledChange = onRequestLoggingChange,
-            )
-        }
-
         items(sortedLogs, key = { it.id }, contentType = { it.javaClass.simpleName }) { log ->
             when (log) {
                 is LogEntry.RequestLog -> RequestLogCard(
@@ -136,41 +118,6 @@ private fun UnifiedLogList(
             sheetState = sheetState
         ) {
             RequestLogDetail(log)
-        }
-    }
-}
-
-@Composable
-private fun RequestLoggingSwitchCard(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CustomColors.cardColorsOnSurfaceContainer,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.log_page_record_requests),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(R.string.log_page_record_requests_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-            )
         }
     }
 }
