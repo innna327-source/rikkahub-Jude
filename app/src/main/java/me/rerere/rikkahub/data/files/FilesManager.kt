@@ -439,6 +439,7 @@ class FilesManager(
 
 object FileFolders {
     const val UPLOAD = "upload"
+    const val IMAGES = "images"
     const val SKILLS = "skills"
     const val FONTS = "fonts"
 }

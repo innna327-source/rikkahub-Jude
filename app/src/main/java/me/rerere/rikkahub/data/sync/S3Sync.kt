@@ -156,6 +156,18 @@ class S3Sync(
                     Log.w(TAG, "prepareBackupFile: Upload folder does not exist or is not a directory")
                 }
 
+                val imagesFolder = File(context.filesDir, FileFolders.IMAGES)
+                if (imagesFolder.exists() && imagesFolder.isDirectory) {
+                    Log.i(TAG, "prepareBackupFile: Backing up images from ${imagesFolder.absolutePath}")
+                    imagesFolder.listFiles()?.forEach { file ->
+                        if (file.isFile) {
+                            addFileToZip(zipOut, file, "${FileFolders.IMAGES}/${file.name}")
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "prepareBackupFile: Images folder does not exist or is not a directory")
+                }
+
                 val skillsFolder = File(context.filesDir, FileFolders.SKILLS)
                 if (skillsFolder.exists() && skillsFolder.isDirectory) {
                     Log.i(TAG, "prepareBackupFile: Backing up skills from ${skillsFolder.absolutePath}")
@@ -278,6 +290,21 @@ class S3Sync(
                                         Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
                                         throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
                                     }
+                                }
+                            } else if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                zipEntry.name.startsWith("${FileFolders.IMAGES}/")
+                            ) {
+                                val fileName = zipEntry.name.substringAfter("${FileFolders.IMAGES}/")
+                                if (fileName.isNotEmpty() && !fileName.contains('/')) {
+                                    val imagesFolder = File(context.filesDir, FileFolders.IMAGES).apply { mkdirs() }
+                                    val targetFile = File(imagesFolder, fileName)
+                                    FileOutputStream(targetFile).use { outputStream ->
+                                        zipIn.copyTo(outputStream)
+                                    }
+                                    Log.i(
+                                        TAG,
+                                        "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
+                                    )
                                 }
                             } else if (config.items.contains(S3Config.BackupItem.FILES) &&
                                 zipEntry.name.startsWith("${FileFolders.SKILLS}/")
