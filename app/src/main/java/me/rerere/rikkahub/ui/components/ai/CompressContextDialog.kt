@@ -36,6 +36,12 @@ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 fun CompressContextDialog(
     autoCompressConfig: AutoCompressConfig?,
     onDismiss: () -> Unit,
+    onSaveConfig: (
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+        autoCompress: Boolean
+    ) -> Unit,
     onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, autoCompress: Boolean) -> Job
 ) {
     var additionalPrompt by remember { mutableStateOf(autoCompressConfig?.additionalPrompt.orEmpty()) }
@@ -48,6 +54,14 @@ fun CompressContextDialog(
     val keepRecentOptions = listOf(1, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
+    val currentAutoCompressConfig = AutoCompressConfig(
+        enabled = autoCompress,
+        additionalPrompt = additionalPrompt,
+        targetTokens = selectedTokens,
+        keepRecentMessages = keepRecentMessages.coerceAtLeast(1),
+    )
+    val showSaveConfigButton = autoCompress ||
+        currentAutoCompressConfig != (autoCompressConfig ?: AutoCompressConfig())
 
     // Monitor job completion
     LaunchedEffect(currentJob) {
@@ -178,10 +192,22 @@ fun CompressContextDialog(
                     Text(stringResource(R.string.cancel))
                 }
             } else {
-                TextButton(onClick = {
-                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages, autoCompress)
-                }) {
-                    Text(stringResource(R.string.confirm))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showSaveConfigButton) {
+                        TextButton(onClick = {
+                            onSaveConfig(additionalPrompt, selectedTokens, keepRecentMessages, autoCompress)
+                        }) {
+                            Text(stringResource(R.string.chat_page_save))
+                        }
+                    }
+                    TextButton(onClick = {
+                        currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages, autoCompress)
+                    }) {
+                        Text(stringResource(R.string.confirm))
+                    }
                 }
             }
         },

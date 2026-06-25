@@ -935,11 +935,15 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
     ) {
-        val config = conversation.autoCompressConfig ?: return
-        if (!config.enabled) return
-
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+        val config = if (assistant.allowConversationSystemPrompt) {
+            conversation.autoCompressConfig
+        } else {
+            assistant.autoCompressConfig
+        } ?: return
+        if (!config.enabled) return
+
         val triggerMessageCount = assistant.contextMessageSize
         if (triggerMessageCount <= 0) return
 
@@ -952,7 +956,11 @@ class ChatService(
             additionalPrompt = config.additionalPrompt,
             targetTokens = config.targetTokens,
             keepRecentMessages = keepRecentMessages,
-            autoCompressConfig = config.copy(keepRecentMessages = keepRecentMessages),
+            autoCompressConfig = if (assistant.allowConversationSystemPrompt) {
+                config.copy(keepRecentMessages = keepRecentMessages)
+            } else {
+                null
+            },
         ).onFailure {
             it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_compress_conversation))

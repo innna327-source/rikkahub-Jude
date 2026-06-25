@@ -55,6 +55,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AutoCompressConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -76,6 +77,7 @@ internal fun FilesPicker(
         keepRecentMessages: Int,
         autoCompress: Boolean
     ) -> Job,
+    onSaveAutoCompressConfig: (AutoCompressConfig) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
     showInjectionSheet: Boolean,
@@ -91,6 +93,11 @@ internal fun FilesPicker(
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
+    val autoCompressConfig = if (assistant.allowConversationSystemPrompt) {
+        conversation.autoCompressConfig
+    } else {
+        assistant.autoCompressConfig
+    }
 
     Column(
         modifier = Modifier
@@ -206,12 +213,28 @@ internal fun FilesPicker(
 
     // Compress Context Dialog
     if (showCompressDialog) {
-        CompressContextDialog(autoCompressConfig = conversation.autoCompressConfig, onDismiss = {
-            onShowCompressDialogChange(false)
-            onDismiss()
-        }, onConfirm = { additionalPrompt, targetTokens, keepRecentMessages, autoCompress ->
-            onCompressContext(additionalPrompt, targetTokens, keepRecentMessages, autoCompress)
-        })
+        CompressContextDialog(
+            autoCompressConfig = autoCompressConfig,
+            onDismiss = {
+                onShowCompressDialogChange(false)
+                onDismiss()
+            },
+            onSaveConfig = { additionalPrompt, targetTokens, keepRecentMessages, autoCompress ->
+                onSaveAutoCompressConfig(
+                    AutoCompressConfig(
+                        enabled = autoCompress,
+                        additionalPrompt = additionalPrompt,
+                        targetTokens = targetTokens,
+                        keepRecentMessages = keepRecentMessages.coerceAtLeast(1),
+                    )
+                )
+                onShowCompressDialogChange(false)
+                onDismiss()
+            },
+            onConfirm = { additionalPrompt, targetTokens, keepRecentMessages, autoCompress ->
+                onCompressContext(additionalPrompt, targetTokens, keepRecentMessages, autoCompress)
+            },
+        )
     }
 }
 

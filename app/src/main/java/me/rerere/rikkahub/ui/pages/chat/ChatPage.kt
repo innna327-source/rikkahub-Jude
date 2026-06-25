@@ -57,6 +57,7 @@ import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
@@ -390,6 +391,9 @@ private fun ChatPageContent(
                             }
                         }
                     },
+                    onSaveAutoCompressConfig = {
+                        vm.saveAutoCompressConfig(it)
+                    },
                 )
             },
             containerColor = Color.Transparent,
@@ -566,9 +570,17 @@ private fun TopBar(
             }
 
             conversation.compressedSummary?.takeIf { it.isNotBlank() }?.let { summary ->
+                val autoCompressConfig = settings.getAssistantById(conversation.assistantId)
+                    ?.let { assistant ->
+                        if (assistant.allowConversationSystemPrompt) {
+                            conversation.autoCompressConfig
+                        } else {
+                            assistant.autoCompressConfig
+                        }
+                    }
                 ConversationSummaryButton(
                     summary = summary,
-                    autoCompressEnabled = conversation.autoCompressConfig?.enabled == true,
+                    autoCompressEnabled = autoCompressConfig?.enabled == true,
                     onSummaryChange = onCompressedSummaryChange,
                     onEditorVisibilityChange = onSummaryEditorVisibilityChange,
                 )

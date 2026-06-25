@@ -26,6 +26,7 @@ import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
@@ -196,20 +197,55 @@ class ChatVM(
         autoCompress: Boolean,
     ): Job {
         return viewModelScope.launch {
+            val autoCompressConfig = AutoCompressConfig(
+                enabled = autoCompress,
+                additionalPrompt = additionalPrompt,
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages.coerceAtLeast(1),
+            )
+            val assistant = settings.value.getAssistantById(conversation.value.assistantId)
+            val conversationScoped = assistant?.allowConversationSystemPrompt == true
             chatService.compressConversation(
                 _conversationId,
                 conversation.value,
                 additionalPrompt,
                 targetTokens,
                 keepRecentMessages,
-                AutoCompressConfig(
-                    enabled = autoCompress,
-                    additionalPrompt = additionalPrompt,
-                    targetTokens = targetTokens,
-                    keepRecentMessages = keepRecentMessages,
-                )
-            ).onFailure {
+                if (conversationScoped) autoCompressConfig else null
+            ).onSuccess {
+                saveAutoCompressConfigInternal(autoCompressConfig)
+            }.onFailure {
                 chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
+            }
+        }
+    }
+
+    fun saveAutoCompressConfig(config: AutoCompressConfig) {
+        viewModelScope.launch {
+            saveAutoCompressConfigInternal(config)
+        }
+    }
+
+    private suspend fun saveAutoCompressConfigInternal(config: AutoCompressConfig) {
+        val currentConversation = conversation.value
+        val assistant = settings.value.getAssistantById(currentConversation.assistantId)
+            ?: return
+        if (assistant.allowConversationSystemPrompt) {
+            chatService.saveConversation(
+                _conversationId,
+                currentConversation.copy(autoCompressConfig = config)
+            )
+        } else {
+            settingsStore.update { currentSettings ->
+                currentSettings.copy(
+                    assistants = currentSettings.assistants.map { item ->
+                        if (item.id == assistant.id) {
+                            item.copy(autoCompressConfig = config)
+                        } else {
+                            item
+                        }
+                    }
+                )
             }
         }
     }

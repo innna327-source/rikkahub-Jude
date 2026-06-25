@@ -99,11 +99,13 @@ import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AutoCompressConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
@@ -146,12 +148,13 @@ fun ChatInput(
         keepRecentMessages: Int,
         autoCompress: Boolean
     ) -> Job,
+    onSaveAutoCompressConfig: (AutoCompressConfig) -> Unit,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
 ) {
     val toaster = LocalToaster.current
-    val assistant = settings.getCurrentAssistant()
+    val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
     val filesHazeStyle = HazeMaterials.thin()
@@ -587,6 +590,7 @@ fun ChatInput(
                             assistant = assistant,
                             mcpManager = mcpManager,
                             onCompressContext = onCompressContext,
+                            onSaveAutoCompressConfig = onSaveAutoCompressConfig,
                             onUpdateAssistant = onUpdateAssistant,
                             onUpdateConversation = onUpdateConversation,
                             showInjectionSheet = showInjectionSheet,
