@@ -1,11 +1,15 @@
 package me.rerere.rikkahub.data.datastore.migration
 
+import android.net.Uri
 import android.util.Log
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.utils.JsonInstant
+import java.io.File
 
 private const val TAG = "SettingsJsonMigrator"
 
@@ -17,6 +21,7 @@ private const val TAG = "SettingsJsonMigrator"
  * 此工具类负责在反序列化前对旧格式的 JSON 执行等价的迁移操作。
  */
 object SettingsJsonMigrator {
+    private val LOCAL_FILE_FOLDERS = setOf("upload", "images", "fonts", "skills")
 
     /**
      * 对 settings JSON 字符串依次应用所有版本的迁移。
@@ -70,5 +75,71 @@ object SettingsJsonMigrator {
         }.onFailure {
             Log.e(TAG, "migrate: Failed to migrate settings JSON, using original", it)
         }.getOrDefault(settingsJson)
+    }
+
+    fun migrateLocalFileUris(settingsJson: String, filesDir: File): String {
+        return runCatching {
+            val root = JsonInstant.parseToJsonElement(settingsJson)
+            JsonInstant.encodeToString(rewriteLocalFileUris(root, filesDir))
+        }.onFailure {
+            Log.e(TAG, "migrateLocalFileUris: Failed to migrate local file uris, using original", it)
+        }.getOrDefault(settingsJson)
+    }
+
+    private fun rewriteLocalFileUris(element: JsonElement, filesDir: File): JsonElement {
+        return when (element) {
+            is JsonObject -> JsonObject(
+                element.mapValues { (_, value) ->
+                    rewriteLocalFileUris(value, filesDir)
+                }
+            )
+
+            is JsonArray -> JsonArray(
+                element.map { item ->
+                    rewriteLocalFileUris(item, filesDir)
+                }
+            )
+
+            is JsonPrimitive -> {
+                if (element.isString) {
+                    JsonPrimitive(rewriteLocalFileUri(element.content, filesDir))
+                } else {
+                    element
+                }
+            }
+        }
+    }
+
+    private fun rewriteLocalFileUri(value: String, filesDir: File): String {
+        val isFileUri = value.startsWith("file:")
+        if (!isFileUri && !value.startsWith("/")) {
+            return value
+        }
+
+        val path = if (isFileUri) {
+            Uri.parse(value).path ?: return value
+        } else {
+            value
+        }
+
+        val relativePath = extractKnownFilesDirPath(path) ?: return value
+        val targetFile = File(filesDir, relativePath)
+        return if (isFileUri) {
+            Uri.fromFile(targetFile).toString()
+        } else {
+            targetFile.absolutePath
+        }
+    }
+
+    private fun extractKnownFilesDirPath(path: String): String? {
+        val filesMarker = "/files/"
+        val filesIndex = path.indexOf(filesMarker)
+        if (filesIndex < 0) return null
+
+        val relativePath = path.substring(filesIndex + filesMarker.length)
+        val folder = relativePath.substringBefore('/')
+        return relativePath.takeIf {
+            folder in LOCAL_FILE_FOLDERS && it.length > folder.length
+        }
     }
 }

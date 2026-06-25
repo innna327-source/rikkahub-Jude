@@ -247,7 +247,11 @@ class WebDavSync(
                             Log.i(TAG, "restoreFromBackupFile: Restoring settings")
                             try {
                                 val migratedJson = SettingsJsonMigrator.migrate(settingsJson)
-                                val settings = json.decodeFromString<Settings>(migratedJson)
+                                val normalizedJson = SettingsJsonMigrator.migrateLocalFileUris(
+                                    settingsJson = migratedJson,
+                                    filesDir = context.filesDir,
+                                )
+                                val settings = json.decodeFromString<Settings>(normalizedJson)
                                 settingsStore.update(settings)
                                 Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
                             } catch (e: Exception) {
