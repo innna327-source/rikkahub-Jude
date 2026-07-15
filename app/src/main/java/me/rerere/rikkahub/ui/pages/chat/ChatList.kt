@@ -67,7 +67,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
@@ -88,6 +87,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
@@ -219,7 +219,7 @@ private fun ChatListNormal(
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
-    var showJumperBySwipe by remember { mutableStateOf(false) }
+    var showJumperAfterScroll by remember { mutableStateOf(false) }
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
     val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
@@ -290,35 +290,32 @@ private fun ChatListNormal(
     }
     val lastMessageNodeId = displayedMessageNodes.lastOrNull()?.id
 
+    LaunchedEffect(state, settings.displaySetting.showMessageJumper) {
+        if (!settings.displaySetting.showMessageJumper) {
+            showJumperAfterScroll = false
+            return@LaunchedEffect
+        }
+        var wasScrolling = false
+        var hideJumperJob: Job? = null
+        snapshotFlow { state.isScrollInProgress }.collect { isScrolling ->
+            if (isScrolling) {
+                wasScrolling = true
+                hideJumperJob?.cancel()
+                showJumperAfterScroll = false
+            } else if (wasScrolling) {
+                wasScrolling = false
+                showJumperAfterScroll = true
+                hideJumperJob?.cancel()
+                hideJumperJob = launch {
+                    delay(3500)
+                    showJumperAfterScroll = false
+                }
+            }
+        }
+    }
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(settings.displaySetting.showMessageJumper) {
-                if (!settings.displaySetting.showMessageJumper) return@pointerInput
-                val triggerDistance = 120.dp.toPx()
-                var horizontalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        horizontalDrag = 0f
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        horizontalDrag += dragAmount
-                    },
-                    onDragEnd = {
-                        if (horizontalDrag <= -triggerDistance) {
-                            showJumperBySwipe = true
-                            scope.launch {
-                                delay(3500)
-                                showJumperBySwipe = false
-                            }
-                        }
-                        horizontalDrag = 0f
-                    },
-                    onDragCancel = {
-                        horizontalDrag = 0f
-                    }
-                )
-            },
+        modifier = Modifier.fillMaxSize(),
     ) {
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
@@ -551,8 +548,8 @@ private fun ChatListNormal(
 
             // 消息快速跳转
             MessageJumper(
-                show = showJumperBySwipe && settings.displaySetting.showMessageJumper && !captureProgress,
-                onLeft = settings.displaySetting.messageJumperOnLeft,
+                show = showJumperAfterScroll && settings.displaySetting.showMessageJumper && !captureProgress,
+                onLeft = true,
                 scope = scope,
                 state = state
             )
@@ -695,12 +692,12 @@ private fun ChatListPreview(
         if (showCompressedMessages) conversation.messageNodes else conversation.visibleMessageNodes
     }
 
-    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
-    val filteredMessages = remember(messageNodes, conversation.messageNodes, searchQuery) {
+    // 过滤消息，同时保留当前显示列表的 index，保证隐藏/显示压缩消息后跳转一致。
+    val filteredMessages = remember(messageNodes, searchQuery) {
         if (searchQuery.isBlank()) {
-            messageNodes.map { node -> conversation.messageNodes.indexOf(node) to node }
+            messageNodes.mapIndexed { index, node -> index to node }
         } else {
-            messageNodes.map { node -> conversation.messageNodes.indexOf(node) to node }
+            messageNodes.mapIndexed { index, node -> index to node }
                 .filter { (_, node) -> node.currentMessage.toText().contains(searchQuery, ignoreCase = true) }
         }
     }

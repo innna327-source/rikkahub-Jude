@@ -20,7 +20,10 @@ import okhttp3.Request
 import java.util.Locale
 
 private const val API_URL = "https://api.github.com/repos/innna327-source/rikkahub-auto-compress/releases/latest"
-private const val UPDATE_ASSET_NAME = "app-arm64-v8a-debug.apk"
+private val UPDATE_ASSET_NAMES = listOf(
+    "app-universal-debug.apk",
+    "app-arm64-v8a-debug.apk",
+)
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -114,8 +117,9 @@ private data class GithubReleaseAsset(
 )
 
 private fun GithubRelease.toUpdateInfo(): UpdateInfo {
-    val asset = assets.firstOrNull { it.name == UPDATE_ASSET_NAME }
-        ?: error("Update asset not found: $UPDATE_ASSET_NAME")
+    val asset = UPDATE_ASSET_NAMES.firstNotNullOfOrNull { assetName ->
+        assets.firstOrNull { it.name == assetName }
+    } ?: error("Update asset not found: ${UPDATE_ASSET_NAMES.joinToString()}")
     return UpdateInfo(
         version = tagName.removePrefix("v"),
         publishedAt = publishedAt,
