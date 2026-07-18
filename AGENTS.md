@@ -11,9 +11,12 @@
 
 - Keep changes narrow and grounded in the current repo. Do not rewrite unrelated code.
 - Do not commit, build APKs, or upload releases unless the user explicitly asks.
+- After code changes, do not build/package APKs by default. Run compile/tests for verification, but only package an APK when the user explicitly asks to build/package after the change.
 - When the user explicitly asks to commit, push the current branch to GitHub after a successful commit.
-- When the user explicitly asks to build/update an APK, only update this APK unless they ask for another variant:
-  `E:/rikkahub2.0/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`
+- When the user explicitly asks to build/package/update an APK, default to the universal debug APK workflow unless they ask for another variant:
+  `E:/rikkahub2.0/app/build/outputs/apk/debug/app-universal-debug.apk`
+- The universal packaging helper also creates a timestamped copy in the same folder:
+  `RikkaHub-universal-debug-YYYYMMDD-HHMMSS.apk`
 - Avoid adding other APK outputs or build artifacts to git.
 
 ## Common Commands
@@ -24,10 +27,10 @@
   `.\gradlew :app:compileDebugKotlin`
 - Run app unit tests:
   `.\gradlew :app:testDebugUnitTest`
-- Build only the desired arm64 debug APK output:
-  `powershell -ExecutionPolicy Bypass -File scripts\build-arm64-debug-apk.ps1`
-- Force rebuild the desired arm64 debug APK while preserving other debug APK output timestamps:
-  `powershell -ExecutionPolicy Bypass -File scripts\build-arm64-debug-apk.ps1 -RerunTasks`
+- Build the default universal debug APK and timestamped copy:
+  `powershell -ExecutionPolicy Bypass -File scripts\build-universal-debug-apk.ps1`
+- Force rebuild the default universal debug APK and timestamped copy:
+  `powershell -ExecutionPolicy Bypass -File scripts\build-universal-debug-apk.ps1 -RerunTasks`
 - Stop Gradle daemons if files are locked or builds keep running:
   `.\gradlew --stop`
 
@@ -54,7 +57,7 @@
 
 ## Recent Project Context
 
-- App update checks use GitHub releases and recognize the `app-arm64-v8a-debug.apk` asset.
+- App update checks should prefer the `app-universal-debug.apk` asset and only fall back to `app-arm64-v8a-debug.apk` if the universal asset is absent.
 - Backup restore has compatibility work for newer upstream RikkaHub exports:
   - database version 24 / upstream workspace tables
   - nullable top-level settings JSON fields
@@ -64,7 +67,13 @@
 
 ## Build Output Caution
 
-Normal `.\gradlew :app:assembleDebug` builds all configured debug split APK outputs, including universal and x86_64 variants. Use `scripts\build-arm64-debug-apk.ps1` when the requested task is specifically to update only:
+Normal `.\gradlew :app:assembleDebug` builds all configured debug split APK outputs, including universal and x86_64 variants. Use `scripts\build-universal-debug-apk.ps1` for the default package/update request because it refreshes the stable universal APK and creates a timestamped copy:
+
+`E:/rikkahub2.0/app/build/outputs/apk/debug/app-universal-debug.apk`
+
+`E:/rikkahub2.0/app/build/outputs/apk/debug/RikkaHub-universal-debug-YYYYMMDD-HHMMSS.apk`
+
+Use `scripts\build-arm64-debug-apk.ps1` only when the user explicitly asks for the arm64-only variant:
 
 `E:/rikkahub2.0/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`
 

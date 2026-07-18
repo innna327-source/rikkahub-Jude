@@ -26,6 +26,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
@@ -447,12 +448,16 @@ class GenerationHandler(
                     stream = true
                 )
             )
-            val responseStartSize = responseMessages.size
+            val responseBeforeStream = responseMessages
+            var sawAssistantOutput = false
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
                 params = params
             ).collect {
+                if (it.hasAssistantOutput()) {
+                    sawAssistantOutput = true
+                }
                 responseMessages = responseMessages.handleMessageChunk(chunk = it, model = model)
                 it.usage?.let { usage ->
                     responseMessages = responseMessages.mapIndexed { index, message ->
@@ -466,7 +471,7 @@ class GenerationHandler(
                 onUpdateMessages(responseMessages)
             }
 
-            if (!responseMessages.hasAssistantOutputAfter(responseStartSize)) {
+            if (!sawAssistantOutput && !responseMessages.hasAssistantOutputAfter(responseBeforeStream)) {
                 Log.w(TAG, "generateInternal: stream completed without assistant output, retrying without stream")
                 aiLoggingManager.addLog(
                     AILogging.Generation(
@@ -523,10 +528,36 @@ class GenerationHandler(
         }
     }
 
-    private fun List<UIMessage>.hasAssistantOutputAfter(startSize: Int): Boolean {
-        return drop(startSize).any { message ->
-            message.role == MessageRole.ASSISTANT &&
-                (!message.parts.isEmptyUIMessage() || message.parts.any { it is UIMessagePart.Tool })
+    private fun List<UIMessage>.hasAssistantOutputAfter(before: List<UIMessage>): Boolean {
+        if (size > before.size) {
+            return drop(before.size).any { message ->
+                message.role == MessageRole.ASSISTANT &&
+                    (!message.parts.isEmptyUIMessage() || message.parts.any { it is UIMessagePart.Tool })
+            }
+        }
+
+        val previousLast = before.lastOrNull()
+        val currentLast = lastOrNull()
+        return currentLast?.role == MessageRole.ASSISTANT &&
+            currentLast.parts != previousLast?.parts &&
+            (!currentLast.parts.isEmptyUIMessage() || currentLast.parts.any { it is UIMessagePart.Tool })
+    }
+
+    private fun MessageChunk.hasAssistantOutput(): Boolean {
+        return choices.any { choice ->
+            val message = choice.delta ?: choice.message ?: return@any false
+            message.role == MessageRole.ASSISTANT && message.parts.any { part ->
+                when (part) {
+                    is UIMessagePart.Text -> part.text.isNotBlank()
+                    is UIMessagePart.Reasoning -> part.reasoning.isNotBlank()
+                    is UIMessagePart.Image -> part.url.isNotBlank()
+                    is UIMessagePart.Video -> part.url.isNotBlank()
+                    is UIMessagePart.Audio -> part.url.isNotBlank()
+                    is UIMessagePart.Document -> part.url.isNotBlank()
+                    is UIMessagePart.Tool -> true
+                    else -> true
+                }
+            }
         }
     }
 

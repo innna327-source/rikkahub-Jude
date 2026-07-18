@@ -2,9 +2,14 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -29,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -63,6 +69,8 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.momentPersonaName
+import me.rerere.rikkahub.data.model.momentScopeId
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -256,9 +264,24 @@ private fun ChatPageContent(
     var showCompressedMessages by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var summaryEditorVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var voiceCallVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var momentsVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    val assistant = setting.getAssistantById(conversation.assistantId) ?: setting.getCurrentAssistant()
+    val momentsEnabled = assistant.momentsEnabled
+    val momentScopeId = conversation.momentScopeId(assistant)
+    val momentAssistantName = conversation.momentPersonaName(assistant)
+    val momentsVM: MomentsVM = koinViewModel()
+    val rawMomentsUnread by remember(momentScopeId) {
+        momentsVM.observeHasUnread(momentScopeId)
+    }.collectAsStateWithLifecycle(false)
+    val momentsUnread = momentsEnabled && rawMomentsUnread
     val hazeState = rememberHazeState()
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+    LaunchedEffect(momentsEnabled) {
+        if (!momentsEnabled) {
+            momentsVisible = false
+        }
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -292,6 +315,11 @@ private fun ChatPageContent(
                     },
                     onOpenVoiceCall = {
                         voiceCallVisible = true
+                    },
+                    showMoments = momentsEnabled,
+                    momentsUnread = momentsUnread,
+                    onOpenMoments = {
+                        momentsVisible = true
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -500,6 +528,19 @@ private fun ChatPageContent(
                 }
             }
         )
+        MomentsOverlay(
+            visible = momentsVisible && momentsEnabled,
+            assistantId = momentScopeId,
+            assistant = assistant,
+            assistantName = momentAssistantName,
+            conversationSystemPrompt = conversation.customSystemPrompt
+                ?.takeIf { assistant.allowConversationSystemPrompt && it.isNotBlank() },
+            settings = setting,
+            vm = momentsVM,
+            onDismiss = {
+                momentsVisible = false
+            },
+        )
     }
 }
 
@@ -516,6 +557,9 @@ private fun TopBar(
     onCompressedSummaryChange: (String?) -> Unit,
     onSummaryEditorVisibilityChange: (Boolean) -> Unit,
     onOpenVoiceCall: () -> Unit,
+    showMoments: Boolean,
+    momentsUnread: Boolean,
+    onOpenMoments: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -575,62 +619,76 @@ private fun TopBar(
             }
         },
         actions = {
-            IconButton(
-                onClick = onOpenVoiceCall
+            Box(
+                modifier = Modifier
+                    .widthIn(max = if (bigScreen) 336.dp else 176.dp)
+                    .horizontalScroll(rememberScrollState())
             ) {
-                Icon(HugeIcons.Voice, "Voice call")
-            }
+                Row {
+                    IconButton(
+                        onClick = onOpenVoiceCall
+                    ) {
+                        Icon(HugeIcons.Voice, "Voice call")
+                    }
+                    if (showMoments) {
+                        MomentsButton(
+                            hasUnread = momentsUnread,
+                            onClick = onOpenMoments,
+                        )
+                    }
 
-            if (
-                conversation.hasCompressedMessages ||
-                conversation.compressedMessageNodeIds.isNotEmpty() ||
-                conversation.compressedSummary?.isNotBlank() == true
-            ) {
-                IconButton(
-                    onClick = onToggleCompressedMessages
-                ) {
-                    Icon(
-                        imageVector = if (showCompressedMessages) HugeIcons.ViewOff else HugeIcons.View,
-                        contentDescription = if (showCompressedMessages) {
-                            "Hide compressed messages"
-                        } else {
-                            "Show compressed messages"
-                        }
-                    )
-                }
-            }
-
-            conversation.compressedSummary?.takeIf { it.isNotBlank() }?.let { summary ->
-                val autoCompressConfig = settings.getAssistantById(conversation.assistantId)
-                    ?.let { assistant ->
-                        if (assistant.allowConversationSystemPrompt) {
-                            conversation.autoCompressConfig
-                        } else {
-                            assistant.autoCompressConfig
+                    if (
+                        conversation.hasCompressedMessages ||
+                        conversation.compressedMessageNodeIds.isNotEmpty() ||
+                        conversation.compressedSummary?.isNotBlank() == true
+                    ) {
+                        IconButton(
+                            onClick = onToggleCompressedMessages
+                        ) {
+                            Icon(
+                                imageVector = if (showCompressedMessages) HugeIcons.ViewOff else HugeIcons.View,
+                                contentDescription = if (showCompressedMessages) {
+                                    "Hide compressed messages"
+                                } else {
+                                    "Show compressed messages"
+                                }
+                            )
                         }
                     }
-                ConversationSummaryButton(
-                    summary = summary,
-                    autoCompressEnabled = autoCompressConfig?.enabled == true,
-                    onSummaryChange = onCompressedSummaryChange,
-                    onEditorVisibilityChange = onSummaryEditorVisibilityChange,
-                )
-            }
 
-            IconButton(
-                onClick = {
-                    onClickMenu()
-                }
-            ) {
-                Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
-            }
+                    conversation.compressedSummary?.takeIf { it.isNotBlank() }?.let { summary ->
+                        val autoCompressConfig = settings.getAssistantById(conversation.assistantId)
+                            ?.let { assistant ->
+                                if (assistant.allowConversationSystemPrompt) {
+                                    conversation.autoCompressConfig
+                                } else {
+                                    assistant.autoCompressConfig
+                                }
+                            }
+                        ConversationSummaryButton(
+                            summary = summary,
+                            autoCompressEnabled = autoCompressConfig?.enabled == true,
+                            onSummaryChange = onCompressedSummaryChange,
+                            onEditorVisibilityChange = onSummaryEditorVisibilityChange,
+                        )
+                    }
 
-            IconButton(
-                onClick = {
-                    onNewChat()
+                    IconButton(
+                        onClick = {
+                            onClickMenu()
+                        }
+                    ) {
+                        Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
+                    }
+
+                    IconButton(
+                        onClick = {
+                            onNewChat()
+                        }
+                    ) {
+                        Icon(HugeIcons.MessageAdd01, "New Message")
+                    }
                 }
-            ) {
-                Icon(HugeIcons.MessageAdd01, "New Message")
             }
         },
     )

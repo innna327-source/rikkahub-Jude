@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -387,7 +388,17 @@ private fun MessagePartsBlock(
                                 scope = AssistantAffectScope.ASSISTANT,
                                 visual = true,
                             )
-                            if (settings.displaySetting.showAssistantBubble) {
+                            val momentsChatStyle = assistant?.momentsChatStyle == true
+                            if (momentsChatStyle) {
+                                AssistantTextContent(
+                                    content = assistantContent,
+                                    onClickCitation = handleClickCitation,
+                                    selectionEnabled = !loading,
+                                    showParagraphTtsButtons = settings.displaySetting.showParagraphTtsButtons,
+                                    paragraphBubbleMode = true,
+                                    modifier = Modifier.animateContentSize(),
+                                )
+                            } else if (settings.displaySetting.showAssistantBubble) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = RoundedCornerShape(16.dp),
@@ -399,6 +410,7 @@ private fun MessagePartsBlock(
                                             onClickCitation = handleClickCitation,
                                             selectionEnabled = !loading,
                                             showParagraphTtsButtons = settings.displaySetting.showParagraphTtsButtons,
+                                            paragraphBubbleMode = false,
                                         )
                                     }
                                 }
@@ -408,6 +420,7 @@ private fun MessagePartsBlock(
                                     onClickCitation = handleClickCitation,
                                     selectionEnabled = !loading,
                                     showParagraphTtsButtons = settings.displaySetting.showParagraphTtsButtons,
+                                    paragraphBubbleMode = false,
                                     modifier = Modifier
                                         .animateContentSize()
                                 )
@@ -627,14 +640,26 @@ private fun AssistantTextContent(
     onClickCitation: (String) -> Unit,
     selectionEnabled: Boolean,
     showParagraphTtsButtons: Boolean,
+    paragraphBubbleMode: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    if (showParagraphTtsButtons) {
+    if (paragraphBubbleMode) {
         AssistantTextParagraphs(
             content = content,
             onClickCitation = onClickCitation,
             modifier = modifier,
             selectionEnabled = selectionEnabled,
+            showParagraphTtsButtons = showParagraphTtsButtons,
+            paragraphBubbleMode = true,
+        )
+    } else if (showParagraphTtsButtons) {
+        AssistantTextParagraphs(
+            content = content,
+            onClickCitation = onClickCitation,
+            modifier = modifier,
+            selectionEnabled = selectionEnabled,
+            showParagraphTtsButtons = true,
+            paragraphBubbleMode = false,
         )
     } else if (selectionEnabled) {
         SelectionContainer(modifier = modifier) {
@@ -658,10 +683,18 @@ private fun AssistantTextParagraphs(
     onClickCitation: (String) -> Unit,
     modifier: Modifier = Modifier,
     selectionEnabled: Boolean = true,
+    showParagraphTtsButtons: Boolean,
+    paragraphBubbleMode: Boolean,
 ) {
     val tts = LocalTTSState.current
     val isAvailable by tts.isAvailable.collectAsState()
     val displaySetting = LocalSettings.current.displaySetting
+    val isDark = isSystemInDarkTheme()
+    val paragraphBubbleColor = if (isDark) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        Color(0xFFFFF7ED)
+    }
     val segments = remember(content) {
         content.splitAssistantTextSegments()
     }
@@ -691,42 +724,66 @@ private fun AssistantTextParagraphs(
                         )
                     }
                     val canSpeak = isAvailable && textToSpeak.isNotBlank()
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (selectionEnabled) {
-                                SelectionContainer {
+                    val paragraphContent: @Composable (Modifier) -> Unit = { rowModifier ->
+                        Row(
+                            modifier = rowModifier,
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (selectionEnabled) {
+                                    SelectionContainer {
+                                        MarkdownBlock(
+                                            content = segment.text,
+                                            onClickCitation = onClickCitation,
+                                        )
+                                    }
+                                } else {
                                     MarkdownBlock(
                                         content = segment.text,
                                         onClickCitation = onClickCitation,
                                     )
                                 }
-                            } else {
-                                MarkdownBlock(
-                                    content = segment.text,
-                                    onClickCitation = onClickCitation,
-                                )
+                            }
+                            if (showParagraphTtsButtons) {
+                                IconButton(
+                                    enabled = canSpeak,
+                                    onClick = {
+                                        tts.speak(textToSpeak)
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.VolumeHigh,
+                                        contentDescription = stringResource(R.string.tts),
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(
+                                            alpha = if (canSpeak) 0.65f else 0.38f
+                                        )
+                                    )
+                                }
                             }
                         }
-                        IconButton(
-                            enabled = canSpeak,
-                            onClick = {
-                                tts.speak(textToSpeak)
-                            },
-                            modifier = Modifier.size(32.dp)
+                    }
+                    if (paragraphBubbleMode) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = paragraphBubbleColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
                         ) {
-                            Icon(
-                                imageVector = HugeIcons.VolumeHigh,
-                                contentDescription = stringResource(R.string.tts),
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(
-                                    alpha = if (canSpeak) 0.65f else 0.38f
-                                )
+                            paragraphContent(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
                             )
                         }
+                    } else {
+                        paragraphContent(
+                            Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }

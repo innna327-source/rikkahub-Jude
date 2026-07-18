@@ -81,16 +81,22 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AutoCompressConfig
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.momentScopeId
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MomentAuthor
+import me.rerere.rikkahub.data.repository.MomentEntry
+import me.rerere.rikkahub.data.repository.MomentRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
@@ -163,6 +169,7 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    private val momentRepository: MomentRepository,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -553,20 +560,33 @@ class ChatService(
 
             // start generating
             val session = getOrCreateSession(conversationId)
+            val generationMessages = conversation.messagesForGeneration(messageRange)
+            val momentScopeId = conversation.momentScopeId(assistant)
+            val momentContextPrompt = when {
+                requestMode == ChatRequestMode.Normal && assistant.momentsEnabled -> buildMomentContextPromptIfNeeded(
+                    assistantId = momentScopeId,
+                    messages = generationMessages,
+                )
+
+                else -> null
+            }
             generationHandler.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
-                messages = conversation.messagesForGeneration(messageRange),
+                messages = generationMessages,
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationContextSummary = conversation.compressedSummary,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
-                extraSystemPrompt = when (requestMode) {
-                    ChatRequestMode.Normal -> null
-                    ChatRequestMode.VoiceCall -> VOICE_CALL_SYSTEM_PROMPT.trimIndent()
-                },
+                extraSystemPrompt = listOfNotNull(
+                    when (requestMode) {
+                        ChatRequestMode.Normal -> null
+                        ChatRequestMode.VoiceCall -> VOICE_CALL_SYSTEM_PROMPT.trimIndent()
+                    },
+                    momentContextPrompt,
+                ).joinToString("\n\n").takeIf { it.isNotBlank() },
                 maxTokensOverride = when (requestMode) {
                     ChatRequestMode.Normal -> null
                     ChatRequestMode.VoiceCall -> minOf(assistant.maxTokens ?: 300, 300)
@@ -589,6 +609,10 @@ class ChatService(
                         localTools.getTools(
                             options = assistant.localTools,
                             usageLockEnabled = settings.usageReminderConfig.lockEnabled,
+                            momentAssistantId = when {
+                                requestMode == ChatRequestMode.Normal && assistant.momentsEnabled -> momentScopeId
+                                else -> null
+                            },
                         )
                     )
                     if (assistant.enabledSkills.isNotEmpty()) {
@@ -675,6 +699,121 @@ class ChatService(
     }
 
     // ---- 检查无效消息 ----
+
+    private suspend fun buildMomentContextPromptIfNeeded(
+        assistantId: Uuid,
+        messages: List<UIMessage>,
+    ): String? {
+        val latestUserText = messages
+            .asReversed()
+            .firstOrNull { it.role == MessageRole.USER }
+            ?.parts
+            ?.asMomentPlainText()
+            .orEmpty()
+        if (!latestUserText.shouldInjectMomentContext()) {
+            return null
+        }
+
+        val timeline = momentRepository.getTimeline(assistantId).take(6)
+        if (timeline.isEmpty()) {
+            return """
+                ## Moments context
+                The user appears to be asking about Moments, but there are no saved Moments for this assistant yet.
+                Say this naturally if relevant. Do not invent Moments content.
+            """.trimIndent()
+        }
+
+        return buildString {
+            appendLine("## Moments context")
+            appendLine("The user appears to be referring to Moments / social-feed content.")
+            appendLine("Use the saved Moments below as lightweight context for this reply. Do not claim there are other Moments, likes, comments, or images beyond this context.")
+            appendLine()
+            timeline.forEachIndexed { index, entry ->
+                appendMomentEntry(index + 1, entry)
+            }
+        }.trim()
+    }
+
+    private fun String.shouldInjectMomentContext(): Boolean {
+        val text = lowercase(Locale.ROOT)
+        val strongSignals = listOf(
+            "朋友圈",
+            "朋友 圈",
+            "moments",
+            "moment",
+            "说说",
+            "空间动态",
+            "动态圈",
+            "朋友圈内容",
+        )
+        if (strongSignals.any { it in text }) return true
+
+        if ("动态规划" in text) return false
+        val socialSubjects = listOf(
+            "你发",
+            "你刚发",
+            "你刚才发",
+            "我发",
+            "我刚发",
+            "我刚才发",
+            "那条",
+            "这条",
+            "上条",
+            "上一条",
+            "刚才那条",
+            "下面",
+        )
+        val socialActions = listOf(
+            "动态",
+            "点赞",
+            "赞了",
+            "评论",
+            "留言",
+            "回复",
+            "红点",
+            "封面",
+            "背景图",
+        )
+        return socialSubjects.any { it in text } && socialActions.any { it in text }
+    }
+
+    private fun StringBuilder.appendMomentEntry(index: Int, entry: MomentEntry) {
+        val moment = entry.moment
+        val author = when (moment.author) {
+            MomentAuthor.USER -> "USER"
+            MomentAuthor.ASSISTANT -> "ASSISTANT"
+        }
+        appendLine("$index. [$author] ${moment.createdAt.toMomentTimeLabel()}")
+        if (moment.content.isNotBlank()) {
+            appendLine("Content: ${moment.content.take(500)}")
+        }
+        if (moment.contextNote.isNotBlank()) {
+            appendLine("Hidden context note: ${moment.contextNote.take(300)}")
+        }
+        if (moment.imageUris.isNotEmpty()) {
+            appendLine("Images: ${moment.imageUris.size}")
+        }
+        if (moment.imageDescription.isNotBlank()) {
+            appendLine("Image description: ${moment.imageDescription.take(400)}")
+        }
+        if (moment.aiLiked) {
+            appendLine("Assistant liked this user Moment.")
+        }
+        if (moment.aiReplyContent.isNotBlank()) {
+            appendLine("Assistant reaction: ${moment.aiReplyContent.take(300)}")
+        }
+        if (moment.userLiked) {
+            appendLine("User liked this assistant Moment.")
+        }
+        entry.comments.takeLast(4).forEach { comment ->
+            val commentAuthor = when (comment.author) {
+                MomentAuthor.USER -> "USER"
+                MomentAuthor.ASSISTANT -> "ASSISTANT"
+            }
+            appendLine("Comment [$commentAuthor] ${comment.createdAt.toMomentTimeLabel()}: ${comment.content.take(260)}")
+        }
+        appendLine()
+    }
 
     private fun checkInvalidMessages(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value
@@ -1485,6 +1624,30 @@ class ChatService(
             )
         )
         saveConversation(conversationId, updatedConversation)
+    }
+}
+
+private fun List<UIMessagePart>.asMomentPlainText(): String {
+    return joinToString("\n") { part ->
+        when (part) {
+            is UIMessagePart.Text -> part.text
+            is UIMessagePart.Image -> "[image]"
+            is UIMessagePart.Video -> "[video]"
+            is UIMessagePart.Audio -> "[audio]"
+            is UIMessagePart.Document -> "[document: ${part.fileName}]"
+            is UIMessagePart.Tool -> part.output.asMomentPlainText()
+            else -> ""
+        }
+    }.trim()
+}
+
+private fun Long.toMomentTimeLabel(): String {
+    return runCatching {
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.ofEpochMilli(this))
+    }.getOrElse {
+        toString()
     }
 }
 

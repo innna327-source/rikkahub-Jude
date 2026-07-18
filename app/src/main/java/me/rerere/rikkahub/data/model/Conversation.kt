@@ -176,6 +176,49 @@ fun UIMessage.toMessageNode(): MessageNode {
     )
 }
 
+fun Conversation.momentScopeId(assistant: Assistant): Uuid {
+    return if (usesIndependentMomentScope(assistant)) id else assistantId
+}
+
+fun Conversation.usesIndependentMomentScope(assistant: Assistant): Boolean {
+    val hasConversationSystemPrompt = assistant.allowConversationSystemPrompt &&
+        customSystemPrompt?.isNotBlank() == true
+    val hasConversationPromptInjection = assistant.allowConversationPromptInjection &&
+        (modeInjectionIds.isNotEmpty() || lorebookIds.isNotEmpty())
+    return hasConversationSystemPrompt || hasConversationPromptInjection
+}
+
+fun Conversation.momentPersonaName(assistant: Assistant): String {
+    val fallback = assistant.name.ifBlank { "AI" }
+    val prompt = customSystemPrompt
+        ?.takeIf { assistant.allowConversationSystemPrompt && it.isNotBlank() }
+        ?: return fallback
+    return prompt.extractPersonaNameFromPrompt() ?: fallback
+}
+
+private fun String.extractPersonaNameFromPrompt(): String? {
+    val patterns = listOf(
+        Regex("""(?im)(?:人设名字|角色名字|角色名|姓名|名字|名称|昵称)\s*(?:是|为|叫|叫做|名为|[:：])\s*([^\n，。,；;、]{1,40})"""),
+        Regex("""(?im)(?:你叫|你名叫|你名为|你叫做)\s*([^\n，。,；;、]{1,40})"""),
+    )
+    return patterns
+        .firstNotNullOfOrNull { pattern ->
+            pattern.find(this)?.groupValues?.getOrNull(1)?.cleanPersonaName()
+        }
+}
+
+private fun String.cleanPersonaName(): String? {
+    val stopChars = setOf(
+        '，', ',', '。', '.', '；', ';', '：', ':', '\n', '\r', '\t', ' ', '　',
+        '/', '|', '）', ')', '】', ']', '》', '>', '、'
+    )
+    return trim()
+        .trim('"', '\'', '“', '”', '「', '」', '『', '』', '《', '》', '<', '>', '【', '】', '[', ']', '(', ')')
+        .takeWhile { it !in stopChars }
+        .trim()
+        .takeIf { it.length in 1..24 }
+}
+
 /**
  * 递归展开所有 parts，包括工具调用结果中的嵌套 parts。
  */

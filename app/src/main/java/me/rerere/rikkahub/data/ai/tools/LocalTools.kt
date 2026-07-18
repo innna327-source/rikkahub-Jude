@@ -24,6 +24,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.repository.MomentRepository
 import me.rerere.rikkahub.service.UsageReminderService
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
@@ -37,6 +38,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.uuid.Uuid
 
 @Serializable
 sealed class LocalToolOption {
@@ -74,6 +76,7 @@ class LocalTools(
     private val eventBus: AppEventBus,
     private val weatherRepository: WeatherRepository,
     private val settingsStore: SettingsStore,
+    private val momentRepository: MomentRepository,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -338,7 +341,7 @@ class LocalTools(
                 Read Android app usage statistics from this device only.
                 Returns app labels, package names, foreground time, last used time, and launch counts.
                 Use this only when the user asks about local app usage, screen time, frequently used apps, or app launch counts.
-                The tool requires Android Usage Access permission and user approval before each execution.
+                The tool requires Android Usage Access permission and the current assistant's usage stats tool switch to be enabled.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -363,7 +366,7 @@ class LocalTools(
                     }
                 )
             },
-            needsApproval = true,
+            needsApproval = false,
             execute = { params ->
                 val reader = UsageStatsReader(context)
                 if (!reader.hasUsageAccess()) {
@@ -608,7 +611,68 @@ class LocalTools(
         )
     }
 
-    fun getTools(options: List<LocalToolOption>, usageLockEnabled: Boolean = false): List<Tool> {
+    private fun postMomentTool(assistantId: Uuid): Tool {
+        return Tool(
+            name = "post_moment",
+            description = """
+                Post a short Moments update from the assistant during chat.
+                Use this only when there is a sentence the assistant wants the user to see later in Moments,
+                not for every pleasant exchange. The visible content should feel like a natural social feed post.
+                当对话中出现值得纪念、想表达情绪、分享生活感、或适合留作动态的一句话时，可以使用 post_moment 发布朋友圈，但不要频繁。
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("content", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Visible Moments post content, 1 to 3 natural sentences.")
+                        })
+                        put("context_note", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Hidden note explaining why this was posted and the emotional context.")
+                        })
+                    },
+                    required = listOf("content", "context_note")
+                )
+            },
+            needsApproval = false,
+            execute = { params ->
+                val obj = params.jsonObject
+                val content = obj["content"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                val contextNote = obj["context_note"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                if (content.isBlank()) {
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", false)
+                                put("error", "content is required")
+                            }.toString()
+                        )
+                    )
+                } else {
+                    val momentId = momentRepository.postAssistantMoment(
+                        assistantId = assistantId,
+                        content = content,
+                        contextNote = contextNote,
+                    )
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", true)
+                                put("moment_id", momentId.toString())
+                            }.toString()
+                        )
+                    )
+                }
+            }
+        )
+    }
+
+    fun getTools(
+        options: List<LocalToolOption>,
+        usageLockEnabled: Boolean = false,
+        momentAssistantId: Uuid? = null,
+    ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
@@ -633,6 +697,9 @@ class LocalTools(
         }
         if (usageLockEnabled) {
             tools.add(usageLockTool)
+        }
+        if (momentAssistantId != null) {
+            tools.add(postMomentTool(momentAssistantId))
         }
         return tools
     }

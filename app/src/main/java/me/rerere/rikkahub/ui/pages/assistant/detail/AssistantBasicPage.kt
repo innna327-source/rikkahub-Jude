@@ -193,6 +193,54 @@ internal fun AssistantBasicContent(
                     )
                 }
             )
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_moments_chat_style))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_moments_chat_style_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.momentsChatStyle,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    momentsChatStyle = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_moments_enabled))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_moments_enabled_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.momentsEnabled,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    momentsEnabled = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
         }
 
         Card(

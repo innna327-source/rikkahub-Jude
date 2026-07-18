@@ -87,7 +87,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
@@ -219,7 +218,7 @@ private fun ChatListNormal(
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
-    var showJumperAfterScroll by remember { mutableStateOf(false) }
+    var isRecentScroll by remember { mutableStateOf(false) }
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
     val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
@@ -290,30 +289,6 @@ private fun ChatListNormal(
     }
     val lastMessageNodeId = displayedMessageNodes.lastOrNull()?.id
 
-    LaunchedEffect(state, settings.displaySetting.showMessageJumper) {
-        if (!settings.displaySetting.showMessageJumper) {
-            showJumperAfterScroll = false
-            return@LaunchedEffect
-        }
-        var wasScrolling = false
-        var hideJumperJob: Job? = null
-        snapshotFlow { state.isScrollInProgress }.collect { isScrolling ->
-            if (isScrolling) {
-                wasScrolling = true
-                hideJumperJob?.cancel()
-                showJumperAfterScroll = false
-            } else if (wasScrolling) {
-                wasScrolling = false
-                showJumperAfterScroll = true
-                hideJumperJob?.cancel()
-                hideJumperJob = launch {
-                    delay(3500)
-                    showJumperAfterScroll = false
-                }
-            }
-        }
-    }
-
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -329,6 +304,18 @@ private fun ChatListNormal(
                         }
                     }
                 }
+            }
+        }
+
+        // 判断最近是否滚动
+        LaunchedEffect(state.isScrollInProgress) {
+            if (state.isScrollInProgress) {
+                isRecentScroll = true
+                delay(1500)
+                isRecentScroll = false
+            } else {
+                delay(1500)
+                isRecentScroll = false
             }
         }
 
@@ -548,8 +535,8 @@ private fun ChatListNormal(
 
             // 消息快速跳转
             MessageJumper(
-                show = showJumperAfterScroll && settings.displaySetting.showMessageJumper && !captureProgress,
-                onLeft = true,
+                show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
+                onLeft = settings.displaySetting.messageJumperOnLeft,
                 scope = scope,
                 state = state
             )

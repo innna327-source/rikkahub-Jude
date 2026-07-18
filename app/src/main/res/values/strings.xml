@@ -132,6 +132,10 @@
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
   <string name="assistant_page_stream_output">Stream Output</string>
   <string name="assistant_page_stream_output_desc">Whether to enable streaming output for messages</string>
+  <string name="assistant_page_moments_chat_style">朋友圈聊天模式</string>
+  <string name="assistant_page_moments_chat_style_desc">开启后，当前助手回复的每段文字会用米白色消息框包裹；深色模式下使用深色消息框。</string>
+  <string name="assistant_page_moments_enabled">朋友圈</string>
+  <string name="assistant_page_moments_enabled_desc">开启后，当前助手会显示朋友圈入口，并可在合适时发布、点赞或评论动态。</string>
   <string name="assistant_page_strict">Strict</string>
   <string name="assistant_page_system_prompt">System Prompt</string>
   <string name="assistant_page_tab_basic">Basic Settings</string>
