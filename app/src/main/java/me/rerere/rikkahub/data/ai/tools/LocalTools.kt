@@ -16,17 +16,24 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.service.UsageReminderService
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import me.rerere.usagetracker.UsageStatsPeriod
 import me.rerere.usagetracker.UsageStatsReader
 import me.rerere.weather.WeatherRepository
+import kotlinx.coroutines.flow.first
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
@@ -66,6 +73,7 @@ class LocalTools(
     private val context: Context,
     private val eventBus: AppEventBus,
     private val weatherRepository: WeatherRepository,
+    private val settingsStore: SettingsStore,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -412,6 +420,168 @@ class LocalTools(
         )
     }
 
+    val usageLockTool by lazy {
+        Tool(
+            name = "usage_lock_control",
+            description = """
+                Lock or unlock the Android device with RikkaHub's usage lock overlay.
+                Use only when the user asks to lock/unlock usage, enforce a break, or check lock status.
+                The global usage lock switch must be enabled in Usage Tracker settings.
+                For action=lock, provide one of: duration_minutes, unlock_at_timestamp_ms, or unlock_at_iso.
+                If the target is RikkaHub itself, set target_package_name to ${context.packageName} so the app shows a compact floating window instead of a blocking full-screen overlay.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("action", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("status")
+                                add("lock")
+                                add("unlock")
+                            })
+                            put("description", "Operation to perform: status, lock, or unlock")
+                        })
+                        put("duration_minutes", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Lock duration in minutes. Used only for action=lock.")
+                        })
+                        put("unlock_at_timestamp_ms", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Unix epoch timestamp in milliseconds when the lock should end.")
+                        })
+                        put("unlock_at_iso", buildJsonObject {
+                            put("type", "string")
+                            put("description", "ISO-8601 datetime when the lock should end, such as 2026-07-18T23:00:00+08:00.")
+                        })
+                        put("reason", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Short reason to show on the lock overlay.")
+                        })
+                        put("target_package_name", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional package name of the app being locked. Use the current app package when locking RikkaHub itself.")
+                        })
+                        put("target_label", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional readable target app name, such as RikkaHub.")
+                        })
+                    },
+                    required = listOf("action")
+                )
+            },
+            needsApproval = false,
+            execute = { params ->
+                val settings = settingsStore.settingsFlowRaw.first()
+                val lockEnabled = settings.usageReminderConfig.lockEnabled
+                val activeLock = settings.usageReminderState.activeLock
+                    ?.takeIf { it.lockedUntilMillis > System.currentTimeMillis() }
+                val obj = params.jsonObject
+                val action = obj["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
+                if (!lockEnabled) {
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", false)
+                                put("error", "Usage lock is disabled in settings.")
+                            }.toString()
+                        )
+                    )
+                } else when (action) {
+                    "status" -> {
+                        listOf(
+                            UIMessagePart.Text(
+                                buildJsonObject {
+                                    put("enabled", true)
+                                    put("locked", activeLock != null)
+                                    activeLock?.let { lock ->
+                                        put("locked_until_timestamp_ms", lock.lockedUntilMillis)
+                                        put("reason", lock.reason)
+                                        put("source", lock.source)
+                                    }
+                                }.toString()
+                            )
+                        )
+                    }
+
+                    "lock" -> {
+                        if (!UsageReminderService.hasNotificationPermission(context)) {
+                            listOf(
+                                UIMessagePart.Text(
+                                    buildJsonObject {
+                                        put("success", false)
+                                        put("error", "Notification permission is not granted, so the usage lock service cannot start.")
+                                    }.toString()
+                                )
+                            )
+                        } else {
+                            val usageStatsReader = UsageStatsReader(context)
+                            val now = System.currentTimeMillis()
+                            val lockedUntilMillis = obj["unlock_at_timestamp_ms"]?.jsonPrimitive?.longOrNull
+                                ?: obj["duration_minutes"]?.jsonPrimitive?.intOrNull
+                                    ?.takeIf { it > 0 }
+                                    ?.let { now + it * 60_000L }
+                                ?: obj["unlock_at_iso"]?.jsonPrimitive?.contentOrNull
+                                    ?.let { parseUnlockTimeMillis(it) }
+                                ?: error("Provide duration_minutes, unlock_at_timestamp_ms, or unlock_at_iso for action=lock.")
+                            require(lockedUntilMillis > now) { "unlock time must be in the future" }
+                            val reason = obj["reason"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                            val targetLabel = obj["target_label"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                            val requestedTargetPackage = obj["target_package_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                            val targetPackageName = when {
+                                requestedTargetPackage.isNotBlank() -> requestedTargetPackage
+                                targetLabel.equals("RikkaHub", ignoreCase = true) -> context.packageName
+                                targetLabel.equals("rikkahub", ignoreCase = true) -> context.packageName
+                                else -> null
+                            }
+                            UsageReminderService.lock(
+                                context = context,
+                                lockedUntilMillis = lockedUntilMillis,
+                                reason = reason,
+                                source = "ai_tool",
+                                targetPackageName = targetPackageName,
+                                targetLabel = targetLabel.ifBlank {
+                                    if (targetPackageName == context.packageName) "RikkaHub" else ""
+                                },
+                            )
+                            listOf(
+                                UIMessagePart.Text(
+                                    buildJsonObject {
+                                        put("success", true)
+                                        put("locked_until_timestamp_ms", lockedUntilMillis)
+                                        put("reason", reason)
+                                        put("usage_access_granted", usageStatsReader.hasUsageAccess())
+                                        put("overlay_permission_granted", UsageReminderService.canDrawOverlays(context))
+                                        put(
+                                            "target_requires_foreground_monitor",
+                                            targetPackageName != null && targetPackageName != context.packageName
+                                        )
+                                        put("monitoring_started", true)
+                                        targetPackageName?.let { put("target_package_name", it) }
+                                    }.toString()
+                                )
+                            )
+                        }
+                    }
+
+                    "unlock" -> {
+                        UsageReminderService.unlock(context)
+                        listOf(
+                            UIMessagePart.Text(
+                                buildJsonObject {
+                                    put("success", true)
+                                    put("locked", false)
+                                }.toString()
+                            )
+                        )
+                    }
+
+                    else -> error("unknown action: $action, must be one of [status, lock, unlock]")
+                }
+            }
+        )
+    }
+
     val weatherTool by lazy {
         Tool(
             name = "get_local_weather",
@@ -438,7 +608,7 @@ class LocalTools(
         )
     }
 
-    fun getTools(options: List<LocalToolOption>): List<Tool> {
+    fun getTools(options: List<LocalToolOption>, usageLockEnabled: Boolean = false): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
@@ -461,6 +631,21 @@ class LocalTools(
         if (options.contains(LocalToolOption.Weather)) {
             tools.add(weatherTool)
         }
+        if (usageLockEnabled) {
+            tools.add(usageLockTool)
+        }
         return tools
+    }
+}
+
+private fun parseUnlockTimeMillis(value: String): Long {
+    return runCatching {
+        Instant.parse(value).toEpochMilli()
+    }.getOrElse {
+        runCatching {
+            ZonedDateTime.parse(value).toInstant().toEpochMilli()
+        }.getOrElse {
+            LocalDateTime.parse(value).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
     }
 }

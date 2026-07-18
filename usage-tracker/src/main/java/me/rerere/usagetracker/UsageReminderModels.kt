@@ -14,6 +14,7 @@ import java.time.ZoneId
 data class UsageReminderConfig(
     val rules: List<UsageReminderRule> = emptyList(),
     val reminderMessages: List<String> = emptyList(),
+    val lockEnabled: Boolean = false,
 )
 
 @Serializable
@@ -28,6 +29,7 @@ data class UsageReminderRule(
 data class UsageReminderState(
     val date: String = todayKey(),
     val appStates: Map<String, UsageReminderAppState> = emptyMap(),
+    val activeLock: UsageReminderLock? = null,
 )
 
 @Serializable
@@ -36,6 +38,16 @@ data class UsageReminderAppState(
     val ignored: Boolean = false,
     val lastEventTimeMillis: Long = 0L,
     val lastReminderUsageMillis: Long = 0L,
+)
+
+@Serializable
+data class UsageReminderLock(
+    val lockedUntilMillis: Long,
+    val reason: String = "",
+    val source: String = "usage_limit",
+    val targetPackageName: String? = null,
+    val targetLabel: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis(),
 )
 
 data class ForegroundAppEvent(

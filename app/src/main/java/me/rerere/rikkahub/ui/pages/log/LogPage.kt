@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
@@ -50,6 +52,13 @@ import java.util.Locale
 fun LogPage() {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            logs = Logging.getRecentLogs()
+            delay(LOG_REFRESH_INTERVAL_MILLIS)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -81,6 +90,8 @@ fun LogPage() {
         )
     }
 }
+
+private const val LOG_REFRESH_INTERVAL_MILLIS = 1_000L
 
 @Composable
 private fun UnifiedLogList(

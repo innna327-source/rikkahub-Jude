@@ -109,6 +109,31 @@ class UsageStatsReader(private val context: Context) {
             }.sortedBy { it.timestampMillis }
         }
 
+    suspend fun loadCurrentForegroundPackageName(): String? = withContext(Dispatchers.IO) {
+        val usageStatsManager = appContext.getSystemService<UsageStatsManager>() ?: return@withContext null
+        val nowMillis = System.currentTimeMillis()
+        val events = usageStatsManager.queryEvents(
+            (nowMillis - FOREGROUND_STATE_LOOKBACK_MILLIS).coerceAtLeast(0L),
+            nowMillis,
+        )
+        val event = UsageEvents.Event()
+        val activeStarts = mutableMapOf<String, Long>()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val packageName = event.packageName ?: continue
+            when {
+                event.eventType.isForegroundStartEvent() -> {
+                    activeStarts[packageName] = event.timeStamp
+                }
+
+                event.eventType.isForegroundEndEvent() -> {
+                    activeStarts.remove(packageName)
+                }
+            }
+        }
+        activeStarts.maxByOrNull { it.value }?.key
+    }
+
     private fun PackageManager.loadInstalledApps(): Map<String, String> {
         val apps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))

@@ -447,6 +447,12 @@
     <string name="usage_reminder_limit_content">%1$s has been used for %2$s\n%3$s</string>
     <string name="usage_reminder_ignore_today">Ignore today</string>
     <string name="usage_reminder_fallback_quote">Time is up. Take a short break before continuing.</string>
+    <string name="usage_lock_overlay_title">Locked</string>
+    <string name="usage_lock_compact_title">RikkaHub lock reminder</string>
+    <string name="usage_lock_overlay_until">Unlocks at %1$s</string>
+    <string name="usage_lock_auto_reason">%1$s reached the daily usage limit</string>
+    <string name="usage_lock_notification_title">Usage lock active</string>
+    <string name="usage_lock_notification_content">Locked until %1$s. Enable overlay permission to show the full-screen lock.</string>
     <string name="usage_reminder_duration_hours">%1$d h %2$d min</string>
     <string name="usage_reminder_duration_minutes">%1$d min</string>
     <string name="usage_reminder_duration_less_than_minute">&lt;1 min</string>

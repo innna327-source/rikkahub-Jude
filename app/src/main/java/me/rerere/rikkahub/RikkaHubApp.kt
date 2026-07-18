@@ -170,7 +170,9 @@ class RikkaHubApp : Application() {
             runCatching {
                 delay(500)
                 val settings = get<SettingsStore>().settingsFlowRaw.first()
-                if (settings.usageReminderConfig.rules.any { it.enabled }) {
+                val hasActiveLock = settings.usageReminderConfig.lockEnabled &&
+                    settings.usageReminderState.activeLock?.lockedUntilMillis?.let { it > System.currentTimeMillis() } == true
+                if (settings.usageReminderConfig.rules.any { it.enabled } || hasActiveLock) {
                     UsageReminderService.sync(this@RikkaHubApp, settings.usageReminderConfig)
                 }
             }.onFailure {

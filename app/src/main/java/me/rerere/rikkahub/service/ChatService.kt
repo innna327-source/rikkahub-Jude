@@ -585,7 +585,12 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(assistant.localTools))
+                    addAll(
+                        localTools.getTools(
+                            options = assistant.localTools,
+                            usageLockEnabled = settings.usageReminderConfig.lockEnabled,
+                        )
+                    )
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(

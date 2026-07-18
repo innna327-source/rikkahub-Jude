@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.text.format.DateFormat
@@ -43,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -65,6 +67,9 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AppStore
 import me.rerere.hugeicons.stroke.Rocket01
@@ -121,15 +126,30 @@ fun UsageTrackerPage(
         value = reader.hasUsageAccess()
     }
     val hasNotificationPermission = remember(refreshKey) { context.hasNotificationPermission() }
+    val hasOverlayPermission = remember(refreshKey) { context.canDrawOverlays() }
     val usages by produceState<List<AppUsageSummary>>(emptyList(), selectedPeriod, refreshKey, hasAccess) {
         value = if (hasAccess) reader.loadUsage(selectedPeriod) else emptyList()
     }
     val reminderState = usageReminderState.takeIf { it.date == todayKey() } ?: UsageReminderState(date = todayKey())
+    val activeLock = reminderState.activeLock?.takeIf { it.lockedUntilMillis > System.currentTimeMillis() }
     val maxUsageMillis = usages.maxOfOrNull { it.totalTimeForegroundMillis } ?: 0L
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(Unit) {
         refreshKey++
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
+                refreshKey++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     Scaffold(
@@ -195,6 +215,27 @@ fun UsageTrackerPage(
                     )
                 }
                 item {
+                    ReminderLockCard(
+                        enabled = usageReminderConfig.lockEnabled,
+                        activeLock = activeLock,
+                        hasOverlayPermission = hasOverlayPermission,
+                        onOpenOverlaySettings = { context.openOverlayPermissionSettings() },
+                        onEnabledChange = { enabled ->
+                            onUsageReminderConfigChange(
+                                usageReminderConfig.copy(lockEnabled = enabled)
+                            )
+                            if (!enabled) {
+                                onUsageReminderStateChange(
+                                    reminderState.copy(activeLock = null)
+                                )
+                            }
+                            if (enabled && !context.canDrawOverlays()) {
+                                context.openOverlayPermissionSettings()
+                            }
+                        },
+                    )
+                }
+                item {
                     ReminderMessagesCard(
                         messageCount = usageReminderConfig.reminderMessages.size,
                         importResult = reminderMessagesImportResult,
@@ -232,6 +273,63 @@ fun UsageTrackerPage(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReminderLockCard(
+    enabled: Boolean,
+    activeLock: UsageReminderLock?,
+    hasOverlayPermission: Boolean,
+    onOpenOverlaySettings: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "超时锁定",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = if (enabled) {
+                        "超时后显示全屏悬浮窗，自动锁到第二天 00:00；助手也可以在你确认后锁定或解锁。"
+                    } else {
+                        "关闭后，自动锁定和助手锁定工具都会失效。"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (enabled && activeLock != null) {
+                    Text(
+                        text = "当前锁定到 ${formatLockUntil(activeLock.lockedUntilMillis)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (enabled && !hasOverlayPermission) {
+                    Text(
+                        text = "悬浮窗权限未开启，锁定提示无法覆盖其他应用。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(onClick = onOpenOverlaySettings) {
+                        Text("打开悬浮窗权限")
+                    }
+                }
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+            )
         }
     }
 }
@@ -732,6 +830,10 @@ private fun Context.hasNotificationPermission(): Boolean {
         ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
 
+private fun Context.canDrawOverlays(): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+}
+
 private fun Context.openNotificationSettings() {
     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
@@ -743,4 +845,24 @@ private fun Context.openNotificationSettings() {
         }
     }
     startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+private fun Context.openOverlayPermissionSettings() {
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+    }
+    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+@Composable
+private fun formatLockUntil(millis: Long): String {
+    return DateFormat.getDateFormat(LocalContext.current).format(Date(millis)) + " " +
+        DateFormat.getTimeFormat(LocalContext.current).format(Date(millis))
 }

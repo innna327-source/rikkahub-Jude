@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import android.net.Uri
+import android.text.format.DateFormat
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +85,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.blur.materials.HazeMaterials
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -120,6 +123,7 @@ import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.isAllowedFileType
 import org.koin.compose.koinInject
 import java.io.File
+import java.util.Date
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
@@ -637,11 +641,51 @@ private fun TextInputRow(
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val filesManager: FilesManager = koinInject()
     val assistant = settings.getCurrentAssistant()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
         settings.getQuickMessagesOfAssistant(assistant)
     }
+    var lockNowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val activeLock = settings.usageReminderState.activeLock
+    LaunchedEffect(
+        settings.usageReminderConfig.lockEnabled,
+        activeLock?.targetPackageName,
+        activeLock?.lockedUntilMillis,
+    ) {
+        lockNowMillis = System.currentTimeMillis()
+        if (
+            settings.usageReminderConfig.lockEnabled &&
+            activeLock?.targetPackageName == context.packageName &&
+            activeLock.lockedUntilMillis > lockNowMillis
+        ) {
+            while (lockNowMillis < activeLock.lockedUntilMillis) {
+                delay((activeLock.lockedUntilMillis - lockNowMillis).coerceIn(100L, 1_000L))
+                lockNowMillis = System.currentTimeMillis()
+            }
+        }
+    }
+    val rikkahubLock = settings.usageReminderState.activeLock?.takeIf { lock ->
+        settings.usageReminderConfig.lockEnabled &&
+            lock.lockedUntilMillis > lockNowMillis &&
+            lock.targetPackageName == context.packageName
+    }
+    val lockNotice = rikkahubLock?.let { lock ->
+        val unlockText = DateFormat.getDateFormat(context).format(Date(lock.lockedUntilMillis)) + " " +
+            DateFormat.getTimeFormat(context).format(Date(lock.lockedUntilMillis))
+        buildString {
+            append("RikkaHub 已锁定到 ")
+            append(unlockText)
+            if (lock.reason.isNotBlank()) {
+                append("\n")
+                append(lock.reason)
+            }
+        }
+    }.orEmpty()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -671,6 +715,13 @@ private fun TextInputRow(
 
         var isFocused by remember { mutableStateOf(false) }
         var isFullScreen by remember { mutableStateOf(false) }
+        LaunchedEffect(rikkahubLock != null) {
+            if (rikkahubLock != null) {
+                isFullScreen = false
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+            }
+        }
         val receiveContentListener = remember(
             settings.displaySetting.pasteLongTextAsFile, settings.displaySetting.pasteLongTextThreshold
         ) {
@@ -707,49 +758,66 @@ private fun TextInputRow(
                 }
             }
         }
-        TextField(
-            state = state.textContent,
-            modifier = Modifier
-                .fillMaxWidth()
-                .contentReceiver(receiveContentListener)
-                .onFocusChanged {
-                    isFocused = it.isFocused
+        Box(modifier = Modifier.fillMaxWidth()) {
+            TextField(
+                state = state.textContent,
+                enabled = rikkahubLock == null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .contentReceiver(receiveContentListener)
+                    .onFocusChanged {
+                        isFocused = it.isFocused
+                    },
+                shape = MaterialTheme.shapes.largeIncreased,
+                placeholder = {
+                    Text(stringResource(R.string.chat_input_placeholder))
                 },
-            shape = MaterialTheme.shapes.largeIncreased,
-            placeholder = {
-                Text(stringResource(R.string.chat_input_placeholder))
-            },
-            lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
-            keyboardOptions = KeyboardOptions(
-                imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
-            ),
-            onKeyboardAction = {
-                if (settings.displaySetting.sendOnEnter && !state.isEmpty()) {
-                    onSendMessage()
-                }
-            },
-            colors = TextFieldDefaults.colors().copy(
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-            ),
-            trailingIcon = {
-                if (isFocused) {
-                    IconButton(
-                        onClick = {
-                            isFullScreen = !isFullScreen
-                        }) {
-                        Icon(HugeIcons.FullScreen, null)
+                lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
+                ),
+                onKeyboardAction = {
+                    if (settings.displaySetting.sendOnEnter && !state.isEmpty() && rikkahubLock == null) {
+                        onSendMessage()
                     }
-                }
-            },
-            leadingIcon = if (quickMessages.isNotEmpty()) {
-                {
-                    QuickMessageButton(quickMessages = quickMessages, state = state)
-                }
-            } else null,
-        )
+                },
+                colors = TextFieldDefaults.colors().copy(
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+                trailingIcon = {
+                    if (isFocused && rikkahubLock == null) {
+                        IconButton(
+                            onClick = {
+                                isFullScreen = !isFullScreen
+                            }) {
+                            Icon(HugeIcons.FullScreen, null)
+                        }
+                    }
+                },
+                leadingIcon = if (quickMessages.isNotEmpty() && rikkahubLock == null) {
+                    {
+                        QuickMessageButton(quickMessages = quickMessages, state = state)
+                    }
+                } else null,
+            )
+            if (rikkahubLock != null) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(MaterialTheme.shapes.largeIncreased)
+                        .clickable {
+                            toaster.show(
+                                message = lockNotice,
+                                duration = 5.seconds,
+                                type = ToastType.Normal,
+                            )
+                        }
+                )
+            }
+        }
         if (isFullScreen) {
             FullScreenEditor(state = state) {
                 isFullScreen = false
