@@ -63,6 +63,35 @@ class MomentRepository(
 
     suspend fun getMoment(id: Uuid): Moment? = dao.getMoment(id.toString())?.toMoment()
 
+    suspend fun deleteMoments(
+        assistantId: Uuid,
+        momentId: Uuid?,
+        keyword: String,
+        latest: Boolean,
+        limit: Int,
+    ): List<Moment> {
+        val assistantKey = assistantId.toString()
+        val candidates = when {
+            momentId != null -> listOfNotNull(dao.getMoment(momentId.toString()))
+                .filter { it.assistantId == assistantKey }
+
+            keyword.isNotBlank() -> dao.getMoments(assistantKey).filter { moment ->
+                listOf(
+                    moment.content,
+                    moment.contextNote,
+                    moment.imageDescription,
+                    moment.aiReplyContent,
+                ).any { it.contains(keyword, ignoreCase = true) }
+            }
+
+            latest -> dao.getMoments(assistantKey).take(1)
+            else -> emptyList()
+        }.take(limit.coerceIn(1, 20))
+
+        candidates.forEach { dao.deleteMoment(it.id) }
+        return candidates.map { it.toMoment() }
+    }
+
     suspend fun postAssistantMoment(
         assistantId: Uuid,
         content: String,

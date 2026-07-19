@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import android.app.DatePickerDialog
+import android.content.Context
 import android.net.Uri
 import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -82,6 +84,7 @@ import me.rerere.rikkahub.data.repository.MomentEntry
 import me.rerere.rikkahub.data.repository.MomentProfile
 import me.rerere.rikkahub.data.repository.MomentRepository
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import java.util.Calendar
 import kotlin.uuid.Uuid
 
 @Composable
@@ -106,6 +109,14 @@ fun MomentsOverlay(
     }.collectAsStateWithLifecycle(MomentProfile(assistantId))
     val processing by vm.processing.collectAsStateWithLifecycle()
     var composerVisible by remember { mutableStateOf(false) }
+    var selectedDayStartMillis by remember(assistantId) { mutableStateOf<Long?>(null) }
+    val visibleTimeline = remember(timeline, selectedDayStartMillis) {
+        selectedDayStartMillis?.let { start ->
+            val end = start + DAY_MILLIS
+            timeline.filter { it.moment.createdAt in start until end }
+        } ?: timeline
+    }
+    val context = LocalContext.current
 
     LaunchedEffect(assistantId) {
         vm.markViewed(assistantId)
@@ -149,6 +160,13 @@ fun MomentsOverlay(
                             onPost = {
                                 composerVisible = true
                             },
+                            onCalendar = {
+                                showMomentDatePicker(context, selectedDayStartMillis) {
+                                    selectedDayStartMillis = it.takeUnless { dayStart ->
+                                        dayStart == currentDayStartMillis()
+                                    }
+                                }
+                            },
                             onCoverSelected = { uri ->
                                 scope.launch {
                                     val local = vm.filesManager.createChatFilesByContents(listOf(uri))
@@ -157,7 +175,15 @@ fun MomentsOverlay(
                             },
                         )
                     }
-                    if (timeline.isEmpty()) {
+                    selectedDayStartMillis?.let { dayStart ->
+                        item {
+                            MomentDateFilterBar(
+                                label = momentDayLabel(dayStart),
+                                onClear = { selectedDayStartMillis = null },
+                            )
+                        }
+                    }
+                    if (visibleTimeline.isEmpty()) {
                         item {
                             EmptyMomentsState(
                                 modifier = Modifier
@@ -167,7 +193,7 @@ fun MomentsOverlay(
                         }
                     } else {
                         items(
-                            items = timeline,
+                            items = visibleTimeline,
                             key = { it.moment.id.toString() }
                         ) { entry ->
                             MomentItem(
@@ -214,6 +240,7 @@ private fun MomentsHeader(
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     onPost: () -> Unit,
+    onCalendar: () -> Unit,
     onCoverSelected: (Uri) -> Unit,
 ) {
     val coverPicker = rememberLauncherForActivityResult(
@@ -275,14 +302,27 @@ private fun MomentsHeader(
                 }
             }
         }
-        IconButton(
-            onClick = onDismiss,
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .safeDrawingPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(HugeIcons.Cancel01, contentDescription = "Close")
+            IconButton(onClick = onCalendar) {
+                HollowCalendarIcon(
+                    color = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = HugeIcons.Cancel01,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                )
+            }
         }
         Row(
             modifier = Modifier
@@ -308,6 +348,30 @@ private fun MomentsHeader(
                 value = userAvatar,
                 modifier = Modifier.size(72.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun MomentDateFilterBar(
+    label: String,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "正在查看 $label",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onClear) {
+            Text("全部")
         }
     }
 }
@@ -540,6 +604,37 @@ private fun HollowCommentIcon(
 }
 
 @Composable
+private fun HollowCalendarIcon(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(
+            width = w * 0.08f,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        val path = Path().apply {
+            moveTo(w * 0.20f, h * 0.26f)
+            quadraticTo(w * 0.20f, h * 0.14f, w * 0.32f, h * 0.14f)
+            lineTo(w * 0.68f, h * 0.14f)
+            quadraticTo(w * 0.80f, h * 0.14f, w * 0.80f, h * 0.26f)
+            lineTo(w * 0.80f, h * 0.76f)
+            quadraticTo(w * 0.80f, h * 0.88f, w * 0.68f, h * 0.88f)
+            lineTo(w * 0.32f, h * 0.88f)
+            quadraticTo(w * 0.20f, h * 0.88f, w * 0.20f, h * 0.76f)
+            close()
+        }
+        drawPath(path = path, color = color, style = stroke)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(w * 0.20f, h * 0.36f), end = androidx.compose.ui.geometry.Offset(w * 0.80f, h * 0.36f), strokeWidth = w * 0.08f, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(w * 0.36f, h * 0.08f), end = androidx.compose.ui.geometry.Offset(w * 0.36f, h * 0.22f), strokeWidth = w * 0.08f, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(w * 0.64f, h * 0.08f), end = androidx.compose.ui.geometry.Offset(w * 0.64f, h * 0.22f), strokeWidth = w * 0.08f, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
 private fun MomentReactions(
     moment: Moment,
     comments: List<MomentComment>,
@@ -729,3 +824,44 @@ private fun relativeTime(timestamp: Long): String {
         android.text.format.DateFormat.getTimeFormat(context).format(timestamp)
     }
 }
+
+private fun showMomentDatePicker(
+    context: Context,
+    selectedDayStartMillis: Long?,
+    onDateSelected: (Long) -> Unit,
+) {
+    val initial = Calendar.getInstance().apply {
+        timeInMillis = selectedDayStartMillis ?: System.currentTimeMillis()
+    }
+    DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            val selected = Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, month)
+                set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            onDateSelected(selected.timeInMillis)
+        },
+        initial.get(Calendar.YEAR),
+        initial.get(Calendar.MONTH),
+        initial.get(Calendar.DAY_OF_MONTH),
+    ).show()
+}
+
+private fun momentDayLabel(dayStartMillis: Long): String {
+    return android.text.format.DateFormat.format("yyyy-MM-dd", dayStartMillis).toString()
+}
+
+private fun currentDayStartMillis(): Long = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+private const val DAY_MILLIS = 24L * 60L * 60L * 1000L

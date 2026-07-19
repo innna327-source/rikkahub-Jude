@@ -668,6 +668,92 @@ class LocalTools(
         )
     }
 
+    private fun deleteMomentTool(assistantId: Uuid): Tool {
+        return Tool(
+            name = "delete_moment",
+            description = """
+                Delete saved Moments in the current assistant's Moments timeline.
+                Use this when the user explicitly asks to delete, remove, withdraw, clear, or erase a Moments post.
+                支持用户说“删除朋友圈”“删掉刚才那条朋友圈”“撤回包含某句话的朋友圈”等场景。
+                Prefer moment_id when known. Otherwise use keyword to match visible/hidden Moment text, or latest=true for the newest Moment.
+                Never delete Moments unless the user asks for deletion.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("moment_id", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional exact Moment ID to delete.")
+                        })
+                        put("keyword", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional keyword to find Moments by content, context note, image description, or assistant reaction.")
+                        })
+                        put("latest", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "Delete the latest Moment when no ID or keyword is available. Default false.")
+                        })
+                        put("limit", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Maximum matched Moments to delete, 1 to 20. Default 1.")
+                        })
+                    }
+                )
+            },
+            needsApproval = false,
+            execute = { params ->
+                val obj = params.jsonObject
+                val momentIdText = obj["moment_id"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                val momentId = momentIdText
+                    .takeIf { it.isNotBlank() }
+                    ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                if (momentIdText.isNotBlank() && momentId == null) {
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", false)
+                                put("deleted_count", 0)
+                                put("error", "Invalid moment_id.")
+                            }.toString()
+                        )
+                    )
+                } else {
+                    val keyword = obj["keyword"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                    val latest = obj["latest"]?.jsonPrimitive?.booleanOrNull == true ||
+                        (momentId == null && keyword.isBlank())
+                    val limit = obj["limit"]?.jsonPrimitive?.intOrNull ?: 1
+                    val deleted = momentRepository.deleteMoments(
+                        assistantId = assistantId,
+                        momentId = momentId,
+                        keyword = keyword,
+                        latest = latest,
+                        limit = limit,
+                    )
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", deleted.isNotEmpty())
+                                put("deleted_count", deleted.size)
+                                if (deleted.isEmpty()) {
+                                    put("error", "No matching Moment was found in the current timeline.")
+                                }
+                                put("deleted_moments", buildJsonArray {
+                                    deleted.forEach { moment ->
+                                        addJsonObject {
+                                            put("moment_id", moment.id.toString())
+                                            put("content", moment.content.take(160))
+                                            put("created_at_timestamp_ms", moment.createdAt)
+                                        }
+                                    }
+                                })
+                            }.toString()
+                        )
+                    )
+                }
+            }
+        )
+    }
+
     fun getTools(
         options: List<LocalToolOption>,
         usageLockEnabled: Boolean = false,
@@ -700,6 +786,7 @@ class LocalTools(
         }
         if (momentAssistantId != null) {
             tools.add(postMomentTool(momentAssistantId))
+            tools.add(deleteMomentTool(momentAssistantId))
         }
         return tools
     }
