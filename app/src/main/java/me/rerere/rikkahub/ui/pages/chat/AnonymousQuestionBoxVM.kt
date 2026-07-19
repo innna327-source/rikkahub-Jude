@@ -101,6 +101,7 @@ class AnonymousQuestionBoxVM(
                 Answer an anonymous question in the assistant's anonymous question box.
                 You do not know who asked it. Do not infer, identify, name, or expose the asker.
                 Return only a natural, concise answer with no markdown and no identity claims.
+                Keep the complete answer within 200 characters and finish it naturally before reaching the limit.
 
                 Anonymous question:
                 $question
@@ -118,6 +119,7 @@ class AnonymousQuestionBoxVM(
                 The question and answer are anonymous. Do not infer who wrote either one.
                 Do not reveal that the assistant authored the question or mention any identity.
                 Return only the comment text, with no markdown.
+                Keep the complete comment within 200 characters and finish it naturally before reaching the limit.
 
                 Anonymous question:
                 $question
