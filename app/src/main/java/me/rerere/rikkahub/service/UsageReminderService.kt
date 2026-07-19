@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -169,10 +170,12 @@ class UsageReminderService : Service() {
         monitorJob = scope.launch {
             while (isActive) {
                 var nextDelayMillis = CHECK_INTERVAL_MILLIS
+                val checkStartedAt = SystemClock.elapsedRealtime()
                 runCatching { checkUsageRules() }
                     .onSuccess { nextDelayMillis = it }
                     .onFailure { logUsageLock("checkUsageRules failed", it) }
-                delay(nextDelayMillis)
+                val elapsedMillis = SystemClock.elapsedRealtime() - checkStartedAt
+                delay((nextDelayMillis - elapsedMillis).coerceAtLeast(MIN_MONITOR_DELAY_MILLIS))
             }
         }
     }
@@ -887,9 +890,10 @@ class UsageReminderService : Service() {
         private const val REQUEST_OPEN_USAGE_TRACKER = 200_200
         private const val REQUEST_IGNORE_BASE = 200_300
         private const val CHECK_INTERVAL_MILLIS = 1_000L
+        private const val MIN_MONITOR_DELAY_MILLIS = 100L
         private const val ACTIVE_LOCK_TARGET_CHECK_INTERVAL_MILLIS = 1_000L
         private const val TARGET_REDIRECT_NOTICE_MILLIS = 30_000L
-        private const val TARGET_REDIRECT_COOLDOWN_MILLIS = 5_000L
+        private const val TARGET_REDIRECT_COOLDOWN_MILLIS = 800L
         private const val CHECK_LOOKBACK_MILLIS = 60_000L
         private const val IGNORE_ACTION_START_COUNT = 3
 
