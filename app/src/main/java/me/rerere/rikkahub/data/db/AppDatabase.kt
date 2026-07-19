@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.MomentDAO
+import me.rerere.rikkahub.data.db.dao.AnonymousQuestionDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -23,12 +24,15 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.MomentCommentEntity
 import me.rerere.rikkahub.data.db.entity.MomentEntity
 import me.rerere.rikkahub.data.db.entity.MomentProfileEntity
+import me.rerere.rikkahub.data.db.entity.AnonymousQuestionEntity
+import me.rerere.rikkahub.data.db.entity.AnonymousQuestionReplyEntity
+import me.rerere.rikkahub.data.db.entity.AnonymousQuestionProfileEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 
-const val APP_DATABASE_VERSION = 25
+const val APP_DATABASE_VERSION = 26
 
 @Database(
     entities = [
@@ -42,6 +46,9 @@ const val APP_DATABASE_VERSION = 25
         MomentEntity::class,
         MomentCommentEntity::class,
         MomentProfileEntity::class,
+        AnonymousQuestionEntity::class,
+        AnonymousQuestionReplyEntity::class,
+        AnonymousQuestionProfileEntity::class,
     ],
     version = APP_DATABASE_VERSION,
     autoMigrations = [
@@ -79,6 +86,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDAO
 
     abstract fun momentDao(): MomentDAO
+
+    abstract fun anonymousQuestionDao(): AnonymousQuestionDAO
 
     abstract fun workspaceDao(): WorkspaceDAO
 }

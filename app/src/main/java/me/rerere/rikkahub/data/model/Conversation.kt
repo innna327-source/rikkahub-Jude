@@ -177,6 +177,10 @@ fun UIMessage.toMessageNode(): MessageNode {
 }
 
 fun Conversation.momentScopeId(assistant: Assistant): Uuid {
+    return personaScopeId(assistant)
+}
+
+fun Conversation.personaScopeId(assistant: Assistant): Uuid {
     return if (usesIndependentMomentScope(assistant)) id else assistantId
 }
 

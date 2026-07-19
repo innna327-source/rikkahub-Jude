@@ -19,6 +19,7 @@ data class Assistant(
     val useAssistantAvatar: Boolean = false, // 使用助手头像替代模型头像
     val momentsChatStyle: Boolean = false,
     val momentsEnabled: Boolean = true,
+    val anonymousQuestionBoxEnabled: Boolean = true,
     val tags: List<Uuid> = emptyList(),
     val systemPrompt: String = "",
     val temperature: Float? = null,

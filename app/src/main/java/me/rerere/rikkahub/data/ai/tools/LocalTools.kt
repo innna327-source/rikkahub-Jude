@@ -25,6 +25,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.MomentRepository
+import me.rerere.rikkahub.data.repository.AnonymousQuestionRepository
 import me.rerere.rikkahub.service.UsageReminderService
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
@@ -77,6 +78,7 @@ class LocalTools(
     private val weatherRepository: WeatherRepository,
     private val settingsStore: SettingsStore,
     private val momentRepository: MomentRepository,
+    private val anonymousQuestionRepository: AnonymousQuestionRepository,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -754,10 +756,130 @@ class LocalTools(
         )
     }
 
+    private fun postAnonymousQuestionTool(scopeId: Uuid): Tool {
+        return Tool(
+            name = "post_anonymous_question",
+            description = "Post a short anonymous question-box question when it would be natural and meaningful. Do not post frequently, do not include names or identity clues, and do not mention that the assistant authored it.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("content", buildJsonObject {
+                            put("type", "string")
+                            put("description", "A concise anonymous question, without names or identity clues.")
+                        })
+                    },
+                    required = listOf("content")
+                )
+            },
+            needsApproval = false,
+            execute = { params ->
+                val content = params.jsonObject["content"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                if (content.isBlank()) {
+                    listOf(UIMessagePart.Text(buildJsonObject {
+                        put("success", false)
+                        put("error", "content is required")
+                    }.toString()))
+                } else {
+                    val id = anonymousQuestionRepository.postAssistantQuestion(scopeId, content)
+                    listOf(UIMessagePart.Text(buildJsonObject {
+                        put("success", true)
+                        put("question_id", id.toString())
+                    }.toString()))
+                }
+            }
+        )
+    }
+
+    private fun deleteAnonymousQuestionTool(scopeId: Uuid): Tool {
+        return Tool(
+            name = "delete_anonymous_question",
+            description = """
+                Delete saved questions from the current anonymous question box.
+                Use this only when the user explicitly asks to delete, remove, withdraw, clear, or erase an anonymous question.
+                Prefer question_id when known. Otherwise use keyword to match question or reply text, or latest=true for the newest question.
+                Never delete anonymous questions unless the user asks for deletion.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("question_id", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional exact anonymous question ID to delete.")
+                        })
+                        put("keyword", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional keyword to find anonymous questions by question or reply text.")
+                        })
+                        put("latest", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "Delete the latest anonymous question when no ID or keyword is available. Default false.")
+                        })
+                        put("limit", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Maximum matched anonymous questions to delete, 1 to 20. Default 1.")
+                        })
+                    }
+                )
+            },
+            needsApproval = false,
+            execute = { params ->
+                val obj = params.jsonObject
+                val questionIdText = obj["question_id"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                val questionId = questionIdText
+                    .takeIf { it.isNotBlank() }
+                    ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                if (questionIdText.isNotBlank() && questionId == null) {
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", false)
+                                put("deleted_count", 0)
+                                put("error", "Invalid question_id.")
+                            }.toString()
+                        )
+                    )
+                } else {
+                    val keyword = obj["keyword"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                    val latest = obj["latest"]?.jsonPrimitive?.booleanOrNull == true ||
+                        (questionId == null && keyword.isBlank())
+                    val limit = obj["limit"]?.jsonPrimitive?.intOrNull ?: 1
+                    val deleted = anonymousQuestionRepository.deleteQuestions(
+                        scopeId = scopeId,
+                        questionId = questionId,
+                        keyword = keyword,
+                        latest = latest,
+                        limit = limit,
+                    )
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", deleted.isNotEmpty())
+                                put("deleted_count", deleted.size)
+                                if (deleted.isEmpty()) {
+                                    put("error", "No matching anonymous question was found in the current question box.")
+                                }
+                                put("deleted_questions", buildJsonArray {
+                                    deleted.forEach { question ->
+                                        addJsonObject {
+                                            put("question_id", question.id.toString())
+                                            put("content", question.content.take(160))
+                                            put("created_at_timestamp_ms", question.createdAt)
+                                        }
+                                    }
+                                })
+                            }.toString()
+                        )
+                    )
+                }
+            }
+        )
+    }
+
     fun getTools(
         options: List<LocalToolOption>,
         usageLockEnabled: Boolean = false,
         momentAssistantId: Uuid? = null,
+        anonymousQuestionScopeId: Uuid? = null,
     ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -787,6 +909,10 @@ class LocalTools(
         if (momentAssistantId != null) {
             tools.add(postMomentTool(momentAssistantId))
             tools.add(deleteMomentTool(momentAssistantId))
+        }
+        if (anonymousQuestionScopeId != null) {
+            tools.add(postAnonymousQuestionTool(anonymousQuestionScopeId))
+            tools.add(deleteAnonymousQuestionTool(anonymousQuestionScopeId))
         }
         return tools
     }

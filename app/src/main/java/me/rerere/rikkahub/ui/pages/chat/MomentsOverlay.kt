@@ -34,7 +34,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -286,21 +285,12 @@ private fun MomentsHeader(
                     tint = Color.White,
                 )
             }
-            IconButton(onClick = onRefresh) {
-                if (processing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White,
-                    )
-                } else {
-                    Text(
-                        text = "↻",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                    )
-                }
-            }
+            DueContentRefreshButton(
+                processing = processing,
+                contentDescription = "Refresh",
+                color = Color.White,
+                onRefresh = onRefresh,
+            )
         }
         Row(
             modifier = Modifier

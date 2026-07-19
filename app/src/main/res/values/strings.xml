@@ -136,6 +136,16 @@
   <string name="assistant_page_moments_chat_style_desc">开启后，当前助手回复的每段文字会用米白色消息框包裹；深色模式下使用深色消息框。</string>
   <string name="assistant_page_moments_enabled">朋友圈</string>
   <string name="assistant_page_moments_enabled_desc">开启后，当前助手会显示朋友圈入口，并可在合适时发布、点赞或评论动态。</string>
+  <string name="assistant_page_anonymous_question_box_enabled">匿名提问箱</string>
+  <string name="assistant_page_anonymous_question_box_enabled_desc">开启后，当前助手拥有匿名提问箱，可发布匿名问题并回复用户问题。</string>
+  <string name="anonymous_question_box">匿名提问箱</string>
+  <string name="anonymous_question_box_empty">还没有匿名问题</string>
+  <string name="anonymous_question_box_publish">发布问题</string>
+  <string name="anonymous_question_box_refresh">刷新</string>
+  <string name="anonymous_question_box_answer">回答这个问题</string>
+  <string name="anonymous_question_box_submit">提交</string>
+  <string name="anonymous_question_box_user">用户问题</string>
+  <string name="anonymous_question_box_assistant">AI 问题</string>
   <string name="assistant_page_strict">Strict</string>
   <string name="assistant_page_system_prompt">System Prompt</string>
   <string name="assistant_page_tab_basic">Basic Settings</string>

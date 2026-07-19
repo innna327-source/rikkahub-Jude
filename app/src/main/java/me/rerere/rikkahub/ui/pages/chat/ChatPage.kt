@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.momentPersonaName
 import me.rerere.rikkahub.data.model.momentScopeId
+import me.rerere.rikkahub.data.model.personaScopeId
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -265,15 +266,23 @@ private fun ChatPageContent(
     var summaryEditorVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var voiceCallVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var momentsVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var anonymousQuestionBoxVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     val assistant = setting.getAssistantById(conversation.assistantId) ?: setting.getCurrentAssistant()
     val momentsEnabled = assistant.momentsEnabled
     val momentScopeId = conversation.momentScopeId(assistant)
+    val anonymousQuestionBoxEnabled = assistant.anonymousQuestionBoxEnabled
+    val anonymousQuestionScopeId = conversation.personaScopeId(assistant)
     val momentAssistantName = conversation.momentPersonaName(assistant)
     val momentsVM: MomentsVM = koinViewModel()
+    val anonymousQuestionBoxVM: AnonymousQuestionBoxVM = koinViewModel()
     val rawMomentsUnread by remember(momentScopeId) {
         momentsVM.observeHasUnread(momentScopeId)
     }.collectAsStateWithLifecycle(false)
     val momentsUnread = momentsEnabled && rawMomentsUnread
+    val rawAnonymousQuestionUnread by remember(anonymousQuestionScopeId) {
+        anonymousQuestionBoxVM.observeHasUnread(anonymousQuestionScopeId)
+    }.collectAsStateWithLifecycle(false)
+    val anonymousQuestionUnread = anonymousQuestionBoxEnabled && rawAnonymousQuestionUnread
     val hazeState = rememberHazeState()
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
@@ -281,6 +290,9 @@ private fun ChatPageContent(
         if (!momentsEnabled) {
             momentsVisible = false
         }
+    }
+    LaunchedEffect(anonymousQuestionBoxEnabled) {
+        if (!anonymousQuestionBoxEnabled) anonymousQuestionBoxVisible = false
     }
 
     Surface(
@@ -321,6 +333,9 @@ private fun ChatPageContent(
                     onOpenMoments = {
                         momentsVisible = true
                     },
+                    showAnonymousQuestionBox = anonymousQuestionBoxEnabled,
+                    anonymousQuestionBoxUnread = anonymousQuestionUnread,
+                    onOpenAnonymousQuestionBox = { anonymousQuestionBoxVisible = true },
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
@@ -541,6 +556,16 @@ private fun ChatPageContent(
                 momentsVisible = false
             },
         )
+        AnonymousQuestionBoxOverlay(
+            visible = anonymousQuestionBoxVisible && anonymousQuestionBoxEnabled,
+            scopeId = anonymousQuestionScopeId,
+            assistant = assistant,
+            settings = setting,
+            conversationSystemPrompt = conversation.customSystemPrompt
+                ?.takeIf { assistant.allowConversationSystemPrompt && it.isNotBlank() },
+            vm = anonymousQuestionBoxVM,
+            onDismiss = { anonymousQuestionBoxVisible = false },
+        )
     }
 }
 
@@ -560,6 +585,9 @@ private fun TopBar(
     showMoments: Boolean,
     momentsUnread: Boolean,
     onOpenMoments: () -> Unit,
+    showAnonymousQuestionBox: Boolean,
+    anonymousQuestionBoxUnread: Boolean,
+    onOpenAnonymousQuestionBox: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -634,6 +662,12 @@ private fun TopBar(
                         MomentsButton(
                             hasUnread = momentsUnread,
                             onClick = onOpenMoments,
+                        )
+                    }
+                    if (showAnonymousQuestionBox) {
+                        AnonymousQuestionBoxButton(
+                            hasUnread = anonymousQuestionBoxUnread,
+                            onClick = onOpenAnonymousQuestionBox,
                         )
                     }
 

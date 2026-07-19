@@ -241,6 +241,26 @@ internal fun AssistantBasicContent(
                     )
                 }
             )
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_anonymous_question_box_enabled))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_anonymous_question_box_enabled_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.anonymousQuestionBoxEnabled,
+                        onCheckedChange = {
+                            onUpdate(assistant.copy(anonymousQuestionBoxEnabled = it))
+                        }
+                    )
+                }
+            )
         }
 
         Card(

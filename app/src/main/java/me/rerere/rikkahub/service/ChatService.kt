@@ -82,6 +82,7 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AutoCompressConfig
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.momentScopeId
+import me.rerere.rikkahub.data.model.personaScopeId
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -89,6 +90,8 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MomentAuthor
 import me.rerere.rikkahub.data.repository.MomentEntry
 import me.rerere.rikkahub.data.repository.MomentRepository
+import me.rerere.rikkahub.data.repository.AnonymousQuestionRepository
+import me.rerere.rikkahub.data.repository.AnonymousQuestionEntry
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -118,6 +121,14 @@ private const val VOICE_CALL_SYSTEM_PROMPT = """
 不要输出贴纸、表情包、颜文字、ASCII 表情或类似“(≧▽≦)”的符号组合。
 任何 emoji、颜文字、表情包文本都会被系统硬性删除。
 不要把语音标签、表演标签写进正文。
+"""
+
+private const val ANONYMOUS_QUESTION_SYSTEM_PROMPT = """
+    Anonymous question-box rules:
+    All questions and answers in the anonymous question box are anonymous.
+    Do not infer, identify, name, or claim to know who asked a question or wrote an answer.
+    When you publish an anonymous question, do not reveal your identity, persona name, or that you authored it.
+    Never include identity clues in an anonymous question, answer, or comment.
 """
 
 data class ChatError(
@@ -170,6 +181,7 @@ class ChatService(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val momentRepository: MomentRepository,
+    private val anonymousQuestionRepository: AnonymousQuestionRepository,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -562,6 +574,12 @@ class ChatService(
             val session = getOrCreateSession(conversationId)
             val generationMessages = conversation.messagesForGeneration(messageRange)
             val momentScopeId = conversation.momentScopeId(assistant)
+            val anonymousQuestionScopeId = conversation.personaScopeId(assistant)
+            val anonymousQuestionContextPrompt = when {
+                requestMode == ChatRequestMode.Normal && assistant.anonymousQuestionBoxEnabled ->
+                    buildAnonymousQuestionContextPromptIfNeeded(anonymousQuestionScopeId, generationMessages)
+                else -> null
+            }
             val momentContextPrompt = when {
                 requestMode == ChatRequestMode.Normal && assistant.momentsEnabled -> buildMomentContextPromptIfNeeded(
                     assistantId = momentScopeId,
@@ -586,6 +604,10 @@ class ChatService(
                         ChatRequestMode.VoiceCall -> VOICE_CALL_SYSTEM_PROMPT.trimIndent()
                     },
                     momentContextPrompt,
+                    ANONYMOUS_QUESTION_SYSTEM_PROMPT.takeIf {
+                        requestMode == ChatRequestMode.Normal && assistant.anonymousQuestionBoxEnabled
+                    },
+                    anonymousQuestionContextPrompt,
                 ).joinToString("\n\n").takeIf { it.isNotBlank() },
                 maxTokensOverride = when (requestMode) {
                     ChatRequestMode.Normal -> null
@@ -611,6 +633,10 @@ class ChatService(
                             usageLockEnabled = settings.usageReminderConfig.lockEnabled,
                             momentAssistantId = when {
                                 requestMode == ChatRequestMode.Normal && assistant.momentsEnabled -> momentScopeId
+                                else -> null
+                            },
+                            anonymousQuestionScopeId = when {
+                                requestMode == ChatRequestMode.Normal && assistant.anonymousQuestionBoxEnabled -> anonymousQuestionScopeId
                                 else -> null
                             },
                         )
@@ -732,6 +758,52 @@ class ChatService(
                 appendMomentEntry(index + 1, entry)
             }
         }.trim()
+    }
+
+    private suspend fun buildAnonymousQuestionContextPromptIfNeeded(
+        scopeId: Uuid,
+        messages: List<UIMessage>,
+    ): String? {
+        val latestUserText = messages
+            .asReversed()
+            .firstOrNull { it.role == MessageRole.USER }
+            ?.parts
+            ?.asMomentPlainText()
+            .orEmpty()
+        if (!latestUserText.shouldInjectAnonymousQuestionContext()) return null
+
+        val entries = anonymousQuestionRepository.getEntries(scopeId).take(6)
+        if (entries.isEmpty()) {
+            return """
+                ## Anonymous question-box context
+                The user is referring to the anonymous question box, but it has no saved questions yet.
+                Do not invent anonymous questions or replies.
+            """.trimIndent()
+        }
+        return buildString {
+            appendLine("## Anonymous question-box context")
+            appendLine("Use the saved anonymous questions below only when relevant. Never infer or reveal who wrote them.")
+            appendLine()
+            entries.forEachIndexed { index, entry ->
+                appendAnonymousQuestionEntry(index + 1, entry)
+            }
+        }.trim()
+    }
+
+    private fun String.shouldInjectAnonymousQuestionContext(): Boolean {
+        val text = lowercase(Locale.ROOT)
+        val strongSignals = listOf("匿名提问箱", "提问箱", "匿名问题", "匿名提问", "匿名箱", "anonymous question")
+        if (strongSignals.any { it in text }) return true
+        val references = listOf("那条问题", "这个问题", "刚才的问题", "上面的问题", "你问的问题", "回答问题")
+        return references.any { it in text }
+    }
+
+    private fun StringBuilder.appendAnonymousQuestionEntry(index: Int, entry: AnonymousQuestionEntry) {
+        appendLine("$index. Question: ${entry.question.content.take(500)}")
+        entry.replies.takeLast(4).forEach { reply ->
+            appendLine("Reply: ${reply.content.take(300)}")
+        }
+        appendLine()
     }
 
     private fun String.shouldInjectMomentContext(): Boolean {
