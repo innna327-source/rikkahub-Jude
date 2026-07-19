@@ -1,11 +1,18 @@
 # RikkaHub 2.0 Agent Notes
 
+## AI Knowledge Routing
+
+- Start with `项目地图.md` for architecture and modification anchors.
+- Read only the matching page under `功能列表/`, then `项目规则.md`, before opening broad source trees.
+- Use `任务进展/` to distinguish merged work, active workspace state, and known follow-ups.
+- Treat current source and Gradle configuration as authoritative when documentation drifts.
+
 ## Project Shape
 
 - Android/Kotlin project, root project name: `rikkahub`.
 - Main app module: `app`.
 - Included modules: `highlight`, `ai`, `search`, `speech`, `common`, `document`, `web`, `material3`, `usage-tracker`, `weather`.
-- User-facing fork/release repo: `https://github.com/innna327-source/rikkahub-auto-compress`.
+- User-facing fork/release repo: `https://github.com/innna327-source/rikkahub-Jude`.
 
 ## User Preferences
 
