@@ -146,6 +146,7 @@
   <string name="anonymous_question_box_submit">提交</string>
   <string name="anonymous_question_box_user">用户问题</string>
   <string name="anonymous_question_box_assistant">AI 问题</string>
+  <string name="moments_vision_model_required">当前聊天模型不支持识图，请在设置 → 默认模型 → OCR 模型中接入可识图模型。</string>
   <string name="assistant_page_strict">Strict</string>
   <string name="assistant_page_system_prompt">System Prompt</string>
   <string name="assistant_page_tab_basic">Basic Settings</string>

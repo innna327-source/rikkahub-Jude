@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.net.Uri
 import android.text.format.DateUtils
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -116,6 +117,12 @@ fun MomentsOverlay(
         } ?: timeline
     }
     val context = LocalContext.current
+
+    LaunchedEffect(vm, context) {
+        vm.visionModelSetupRequired.collect {
+            Toast.makeText(context, R.string.moments_vision_model_required, Toast.LENGTH_LONG).show()
+        }
+    }
 
     LaunchedEffect(assistantId) {
         vm.markViewed(assistantId)

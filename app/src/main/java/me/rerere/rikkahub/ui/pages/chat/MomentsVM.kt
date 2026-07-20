@@ -3,8 +3,11 @@ package me.rerere.rikkahub.ui.pages.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.booleanOrNull
@@ -12,10 +15,14 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.files.FilesManager
@@ -42,6 +49,8 @@ class MomentsVM(
 ) : ViewModel() {
     private val _processing = MutableStateFlow(false)
     val processing: StateFlow<Boolean> = _processing.asStateFlow()
+    private val _visionModelSetupRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val visionModelSetupRequired: SharedFlow<Unit> = _visionModelSetupRequired.asSharedFlow()
     private val processingIds = mutableSetOf<String>()
 
     fun observeTimeline(assistantId: Uuid): Flow<List<MomentEntry>> = momentRepository.observeTimeline(assistantId)
@@ -114,8 +123,16 @@ class MomentsVM(
         val key = "moment:${moment.id}"
         if (!processingIds.add(key)) return
         try {
-            val reaction = generateMomentReaction(moment, assistant, conversationSystemPrompt)
-                ?: MomentReaction(liked = true, comment = "")
+            val reaction = when (val result = generateMomentReaction(moment, assistant, conversationSystemPrompt)) {
+                MomentReactionGeneration.VisionModelSetupRequired -> {
+                    _visionModelSetupRequired.emit(Unit)
+                    return
+                }
+
+                is MomentReactionGeneration.Ready -> {
+                    result.reaction ?: MomentReaction(liked = true, comment = "")
+                }
+            }
             val parsed = parseImageDescriptionOutput(reaction.comment)
             momentRepository.updateMoment(
                 moment.copy(
@@ -157,9 +174,17 @@ class MomentsVM(
         moment: Moment,
         assistant: Assistant,
         conversationSystemPrompt: String?,
-    ): MomentReaction? {
+    ): MomentReactionGeneration {
         val settings = settingsStore.settingsFlow.value
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return null
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+            ?: return MomentReactionGeneration.Ready(null)
+        val requiresOcrFallback = moment.imageUris.isNotEmpty() &&
+            moment.imageDescription.isBlank() &&
+            Modality.IMAGE !in model.inputModalities
+        if (requiresOcrFallback && !settings.hasConfiguredVisionOcrModel()) {
+            return MomentReactionGeneration.VisionModelSetupRequired
+        }
+        val inputTransformers = if (requiresOcrFallback) listOf(OcrTransformer) else emptyList()
         val memories = if (assistant.useGlobalMemory) {
             memoryRepository.getGlobalMemories()
         } else {
@@ -207,14 +232,17 @@ class MomentsVM(
             model = model,
             memories = memories,
             messages = listOf(UIMessage(role = MessageRole.USER, parts = parts)),
+            inputTransformers = inputTransformers,
             conversationSystemPrompt = conversationSystemPrompt,
             maxTokens = 360,
         )
         val parsed = parseMomentReaction(text)
         val imageParsed = parseImageDescriptionOutput(text)
-        return parsed?.copy(comment = listOf(parsed.comment, imageParsed.imageDescription?.let {
-            "[image_desc]$it[/image_desc]"
-        }).filterNotNull().joinToString("\n"))
+        return MomentReactionGeneration.Ready(
+            parsed?.copy(comment = listOf(parsed.comment, imageParsed.imageDescription?.let {
+                "[image_desc]$it[/image_desc]"
+            }).filterNotNull().joinToString("\n"))
+        )
     }
 
     private suspend fun generateCommentReply(
@@ -282,11 +310,12 @@ class MomentsVM(
     }
 
     private suspend fun generateText(
-        settings: me.rerere.rikkahub.data.datastore.Settings,
+        settings: Settings,
         assistant: me.rerere.rikkahub.data.model.Assistant,
         model: me.rerere.ai.provider.Model,
         memories: List<me.rerere.rikkahub.data.model.AssistantMemory>,
         messages: List<UIMessage>,
+        inputTransformers: List<InputMessageTransformer> = emptyList(),
         conversationSystemPrompt: String?,
         maxTokens: Int,
     ): String {
@@ -295,6 +324,7 @@ class MomentsVM(
             settings = settings,
             model = model,
             messages = messages,
+            inputTransformers = inputTransformers,
             assistant = assistant.copy(streamOutput = false),
             conversationSystemPrompt = conversationSystemPrompt,
             memories = memories,
@@ -329,6 +359,11 @@ class MomentsVM(
         val comment: String,
     )
 
+    private sealed interface MomentReactionGeneration {
+        data class Ready(val reaction: MomentReaction?) : MomentReactionGeneration
+        data object VisionModelSetupRequired : MomentReactionGeneration
+    }
+
     private data class ParsedImageOutput(
         val visibleText: String,
         val imageDescription: String?,
@@ -362,4 +397,12 @@ class MomentsVM(
             }
         }.trim()
     }
+}
+
+private fun Settings.hasConfiguredVisionOcrModel(): Boolean {
+    val configuredModelSupportsImages = findModelById(ocrModelId)
+        ?.inputModalities
+        ?.contains(Modality.IMAGE) == true
+    val customOcrModelConfigured = ocrOpenAIConfig.enabled && ocrOpenAIConfig.modelId.isNotBlank()
+    return configuredModelSupportsImages || customOcrModelConfigured
 }
