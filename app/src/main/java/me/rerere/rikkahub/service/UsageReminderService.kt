@@ -277,7 +277,11 @@ class UsageReminderService : Service() {
             if (settings.usageReminderConfig.lockEnabled) {
                 nextLock = UsageReminderLock(
                     lockedUntilMillis = nextMidnightMillis(),
-                    reason = getString(R.string.usage_lock_auto_reason, rule.label),
+                    reason = getString(
+                        R.string.usage_lock_auto_reason,
+                        rule.label,
+                        rule.thresholdMinutes,
+                    ),
                     source = "usage_limit",
                     targetPackageName = rule.packageName,
                     targetLabel = rule.label,
@@ -747,7 +751,12 @@ class UsageReminderService : Service() {
     private fun sendLockNotification(lock: UsageReminderLock) {
         val unlockText = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
             .format(Date(lock.lockedUntilMillis))
-        val content = getString(R.string.usage_lock_notification_content, unlockText)
+        val reasonText = lock.reason.ifBlank { getString(R.string.usage_lock_overlay_title) }
+        val content = getString(
+            R.string.usage_lock_notification_content,
+            reasonText,
+            unlockText,
+        )
         NotificationManagerCompat.from(this).notify(
             NOTIFICATION_ID_LOCK,
             NotificationCompat.Builder(this, USAGE_LIMIT_REMINDER_CHANNEL_ID)

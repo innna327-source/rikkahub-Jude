@@ -475,9 +475,9 @@
     <string name="usage_lock_overlay_title">Locked</string>
     <string name="usage_lock_compact_title">RikkaHub lock reminder</string>
     <string name="usage_lock_overlay_until">Unlocks at %1$s</string>
-    <string name="usage_lock_auto_reason">%1$s reached the daily usage limit</string>
+    <string name="usage_lock_auto_reason">%1$s exceeded the configured daily limit of %2$d minutes. Unlocks automatically at 00:00 tomorrow.</string>
     <string name="usage_lock_notification_title">Usage lock active</string>
-    <string name="usage_lock_notification_content">Locked until %1$s. Enable overlay permission to show the full-screen lock.</string>
+    <string name="usage_lock_notification_content">%1$s\nLocked until %2$s. Enable overlay permission to show the full-screen lock.</string>
     <string name="usage_reminder_duration_hours">%1$d h %2$d min</string>
     <string name="usage_reminder_duration_minutes">%1$d min</string>
     <string name="usage_reminder_duration_less_than_minute">&lt;1 min</string>

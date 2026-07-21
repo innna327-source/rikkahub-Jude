@@ -435,6 +435,12 @@
   <string name="notification_channel_chat_completed">聊天完成</string>
   <string name="notification_channel_chat_live_update">聊天生成進度</string>
   <string name="notification_channel_web_server">網頁伺服器</string>
+  <string name="usage_lock_overlay_title">已鎖定</string>
+  <string name="usage_lock_compact_title">RikkaHub 鎖定提醒</string>
+  <string name="usage_lock_overlay_until">解鎖時間：%1$s</string>
+  <string name="usage_lock_auto_reason">%1$s 已超過設定的每日使用時間 %2$d 分鐘，將於翌日 00:00 自動解鎖。</string>
+  <string name="usage_lock_notification_title">使用時間鎖定</string>
+  <string name="usage_lock_notification_content">%1$s\n鎖定至 %2$s。請開啟懸浮窗權限以顯示全螢幕鎖定提示。</string>
   <string name="notification_live_update_chip_thinking">思考中</string>
   <string name="notification_live_update_chip_tool">工具</string>
   <string name="notification_live_update_chip_writing">正在書寫</string>
