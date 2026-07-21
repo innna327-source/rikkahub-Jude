@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub Auto Compress</h1>
+  <h1>RikkaHub Jude</h1>
 
   [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
   [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
@@ -14,10 +14,10 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 </div>
 
 > [!IMPORTANT]
-> This is an **unofficial community fork** of [RikkaHub](https://github.com/rikkahub/rikkahub),
-> focused on automatic rolling summaries and context compression. It is not an official RikkaHub release.
-> The current public source is based on the RikkaHub `2.2.5` code line, with selected later fixes and the fork changes below.
-> The version shown on the [Releases page](https://github.com/innna327-source/rikkahub-auto-compress/releases)
+> This is an **unofficial community-maintained fork** of [RikkaHub](https://github.com/rikkahub/rikkahub).
+> It is not an official RikkaHub release. The fork keeps the upstream Git history while adding and maintaining
+> features such as automatic rolling summaries, context compression, Moments, and the anonymous question box.
+> The version shown on this fork's [Releases page](https://github.com/innna327-source/rikkahub-Jude/releases)
 > is the source of truth for downloadable builds.
 
 <div align="center">
@@ -27,17 +27,17 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 
 ## 🚀 Download this fork
 
-🔗 **[Download APK from GitHub Releases](https://github.com/innna327-source/rikkahub-auto-compress/releases)**
+🔗 **[Download APK from GitHub Releases](https://github.com/innna327-source/rikkahub-Jude/releases)**
 
 Do not use **Code → Download ZIP** if you only want to install the app; that downloads source code, not an APK.
 
-The currently published package is an `arm64-v8a` debug APK. Back up your data before installation. Because this
-fork and the official app may use different signing certificates, Android might not allow installing one directly
-over the other. If Android reports a signature conflict, export a backup before uninstalling any existing version.
+The default debug build is a universal APK. Back up your data before installation. Because this fork and the
+official app may use different signing certificates, Android might not allow installing one directly over the other.
+If Android reports a signature conflict, export a backup before uninstalling any existing version.
 
 For official builds, visit the [upstream RikkaHub project](https://github.com/rikkahub/rikkahub).
 
-## 🌿 Changes in this fork
+## 🌿 Maintained changes in this fork
 
 - **Automatic rolling summaries and context compression**: keep recent messages while continuously compressing
   older visible history, with editable summaries and configurable target length.
@@ -50,8 +50,32 @@ For official builds, visit the [upstream RikkaHub project](https://github.com/ri
 - **Paragraph-level TTS controls**: play assistant replies paragraph by paragraph, with quoted-text-only,
   English-only, and automatic playback options.
 - **Usage statistics and reminders**: local app-usage views and configurable duration reminders.
+- **Moments**: an assistant-scoped social timeline with AI-generated likes, comments, deletion, date filtering,
+  and manual refresh diagnostics.
+- **Anonymous question box**: assistant-scoped anonymous questions, delayed AI answers, one-time user answers,
+  and follow-up AI comments.
+- **Backup and release maintenance**: compatibility fixes for newer backups, local file restoration, request logs,
+  universal debug APK packaging, and update checks that prefer the universal package.
 
 Unless a release note says otherwise, this fork retains the upstream RikkaHub features listed below.
+
+## 🧭 Ownership and attribution
+
+This repository is maintained by **[innna327-source](https://github.com/innna327-source)**. It is a personal/community
+fork, not the official RikkaHub repository and not a claim that every part of the codebase was written from scratch by
+the fork maintainer.
+
+The repository preserves historical Git commits. Therefore, GitHub may display upstream or inherited commit identities
+such as `RikkaHub Public Release` when showing file history or commit authors. Those names describe the corresponding
+Git metadata; they do not identify the owner or maintainer of this fork. The upstream project and its contributors
+retain credit for their original work. Changes listed in **Maintained changes in this fork** are the scope maintained
+in this repository.
+
+For clarity:
+
+- **Upstream project:** [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
+- **This fork:** [innna327-source/rikkahub-Jude](https://github.com/innna327-source/rikkahub-Jude)
+- **Fork maintainer:** [innna327-source](https://github.com/innna327-source)
 
 ## 💖 Sponsors
 
