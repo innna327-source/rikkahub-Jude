@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +52,8 @@ class MomentsVM(
     val processing: StateFlow<Boolean> = _processing.asStateFlow()
     private val _visionModelSetupRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val visionModelSetupRequired: SharedFlow<Unit> = _visionModelSetupRequired.asSharedFlow()
+    private val _refreshReports = MutableSharedFlow<MomentsRefreshReport>(extraBufferCapacity = 1)
+    val refreshReports: SharedFlow<MomentsRefreshReport> = _refreshReports.asSharedFlow()
     private val processingIds = mutableSetOf<String>()
 
     fun observeTimeline(assistantId: Uuid): Flow<List<MomentEntry>> = momentRepository.observeTimeline(assistantId)
@@ -95,19 +98,50 @@ class MomentsVM(
         assistantId: Uuid,
         assistant: Assistant,
         conversationSystemPrompt: String?,
+        manual: Boolean = false,
     ) {
         viewModelScope.launch {
-            if (_processing.value) return@launch
+            if (_processing.value) {
+                if (manual) {
+                    _refreshReports.emit(MomentsRefreshReport(processingSkipped = true))
+                }
+                return@launch
+            }
             _processing.value = true
             try {
                 val now = System.currentTimeMillis()
-                val dueMoments = momentRepository.getDueUserMoments(assistantId, now, limit = 3)
-                dueMoments.forEach { moment ->
-                    processDueMoment(moment, assistant, conversationSystemPrompt)
+                val moments = if (manual) {
+                    momentRepository.getRefreshUserMoments(assistantId, limit = 3)
+                } else {
+                    momentRepository.getDueUserMoments(assistantId, now, limit = 3)
                 }
-                val dueComments = momentRepository.getDueUserComments(assistantId, now, limit = 3)
-                dueComments.forEach { comment ->
-                    processDueComment(comment, assistant, conversationSystemPrompt)
+                val comments = if (manual) {
+                    momentRepository.getRefreshUserComments(assistantId, limit = 3)
+                } else {
+                    momentRepository.getDueUserComments(assistantId, now, limit = 3)
+                }
+                val outcomes = buildList {
+                    moments.forEach { moment ->
+                        add(processDueMoment(moment, assistant, conversationSystemPrompt))
+                    }
+                    comments.forEach { comment ->
+                        add(processDueComment(comment, assistant, conversationSystemPrompt))
+                    }
+                }
+                if (manual) {
+                    _refreshReports.emit(
+                        MomentsRefreshReport(
+                            candidateCount = outcomes.size,
+                            completedCount = outcomes.count { it.completed },
+                            emptyTextCount = outcomes.count { it.issue == MomentsProcessIssue.EMPTY_TEXT },
+                            invalidResponseCount = outcomes.count { it.issue == MomentsProcessIssue.INVALID_RESPONSE },
+                            modelUnavailableCount = outcomes.count { it.issue == MomentsProcessIssue.MODEL_UNAVAILABLE },
+                            persistenceFailureCount = outcomes.count { it.issue == MomentsProcessIssue.PERSISTENCE_FAILED },
+                            generationFailureCount = outcomes.count { it.issue == MomentsProcessIssue.GENERATION_FAILED },
+                            noVisibleCommentCount = outcomes.count { it.issue == MomentsProcessIssue.NO_VISIBLE_COMMENT },
+                            visionModelRequiredCount = outcomes.count { it.issue == MomentsProcessIssue.VISION_MODEL_REQUIRED },
+                        )
+                    )
                 }
             } finally {
                 _processing.value = false
@@ -119,30 +153,54 @@ class MomentsVM(
         moment: Moment,
         assistant: Assistant,
         conversationSystemPrompt: String?,
-    ) {
+    ): MomentsProcessOutcome {
         val key = "moment:${moment.id}"
-        if (!processingIds.add(key)) return
+        if (!processingIds.add(key)) return MomentsProcessOutcome(MomentsProcessIssue.ALREADY_PROCESSING)
         try {
-            val reaction = when (val result = generateMomentReaction(moment, assistant, conversationSystemPrompt)) {
+            val result = generateMomentReaction(moment, assistant, conversationSystemPrompt)
+            val reaction = when (result) {
                 MomentReactionGeneration.VisionModelSetupRequired -> {
                     _visionModelSetupRequired.emit(Unit)
-                    return
+                    return MomentsProcessOutcome(MomentsProcessIssue.VISION_MODEL_REQUIRED)
                 }
 
-                is MomentReactionGeneration.Ready -> {
-                    result.reaction ?: MomentReaction(liked = true, comment = "")
-                }
+                MomentReactionGeneration.EmptyText ->
+                    return MomentsProcessOutcome(MomentsProcessIssue.EMPTY_TEXT)
+
+                MomentReactionGeneration.InvalidResponse ->
+                    return MomentsProcessOutcome(MomentsProcessIssue.INVALID_RESPONSE)
+
+                MomentReactionGeneration.ModelUnavailable ->
+                    return MomentsProcessOutcome(MomentsProcessIssue.MODEL_UNAVAILABLE)
+
+                is MomentReactionGeneration.Ready -> result.reaction
             }
             val parsed = parseImageDescriptionOutput(reaction.comment)
-            momentRepository.updateMoment(
-                moment.copy(
-                    aiLiked = reaction.liked,
-                    aiReplyContent = parsed.visibleText,
-                    imageDescription = parsed.imageDescription ?: moment.imageDescription,
-                    repliedAt = System.currentTimeMillis(),
-                    replyStatus = MomentReplyStatus.DONE,
-                )
+            val updated = moment.copy(
+                aiLiked = reaction.liked,
+                aiReplyContent = parsed.visibleText,
+                imageDescription = parsed.imageDescription ?: moment.imageDescription,
+                repliedAt = System.currentTimeMillis(),
+                replyStatus = MomentReplyStatus.DONE,
             )
+            momentRepository.updateMoment(updated)
+            val persisted = momentRepository.getMoment(moment.id)
+            if (persisted == null ||
+                persisted.replyStatus != MomentReplyStatus.DONE ||
+                persisted.aiLiked != updated.aiLiked ||
+                persisted.aiReplyContent != updated.aiReplyContent
+            ) {
+                return MomentsProcessOutcome(MomentsProcessIssue.PERSISTENCE_FAILED)
+            }
+            return MomentsProcessOutcome(
+                issue = parsed.visibleText.takeIf { it.isBlank() }?.let {
+                    MomentsProcessIssue.NO_VISIBLE_COMMENT
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return MomentsProcessOutcome(MomentsProcessIssue.GENERATION_FAILED)
         } finally {
             processingIds.remove(key)
         }
@@ -152,19 +210,46 @@ class MomentsVM(
         comment: MomentComment,
         assistant: Assistant,
         conversationSystemPrompt: String?,
-    ) {
+    ): MomentsProcessOutcome {
         val key = "comment:${comment.id}"
-        if (!processingIds.add(key)) return
+        if (!processingIds.add(key)) return MomentsProcessOutcome(MomentsProcessIssue.ALREADY_PROCESSING)
         try {
-            val moment = momentRepository.getMoment(comment.momentId) ?: return
+            val moment = momentRepository.getMoment(comment.momentId)
+                ?: return MomentsProcessOutcome(MomentsProcessIssue.PERSISTENCE_FAILED)
             val comments = momentRepository.getComments(moment.id)
-            val reply = generateCommentReply(moment, comments, comment, assistant, conversationSystemPrompt)
-                .orEmpty()
-                .trim()
-            if (reply.isNotBlank()) {
-                momentRepository.addAssistantComment(moment.id, reply)
+            return when (val result = generateCommentReply(moment, comments, comment, assistant, conversationSystemPrompt)) {
+                CommentGenerationResult.EmptyText ->
+                    MomentsProcessOutcome(MomentsProcessIssue.EMPTY_TEXT)
+
+                CommentGenerationResult.ModelUnavailable ->
+                    MomentsProcessOutcome(MomentsProcessIssue.MODEL_UNAVAILABLE)
+
+                is CommentGenerationResult.Ready -> {
+                    val assistantCommentId = momentRepository.addAssistantComment(moment.id, result.text)
+                    val assistantCommentPersisted = momentRepository.getComments(moment.id).any {
+                        it.id == assistantCommentId &&
+                            it.author == MomentAuthor.ASSISTANT &&
+                            it.content == result.text
+                    }
+                    if (!assistantCommentPersisted) {
+                        MomentsProcessOutcome(MomentsProcessIssue.PERSISTENCE_FAILED)
+                    } else {
+                        momentRepository.updateComment(comment.copy(replyStatus = MomentReplyStatus.DONE))
+                        val userCommentPersisted = momentRepository.getComments(moment.id).any {
+                            it.id == comment.id && it.replyStatus == MomentReplyStatus.DONE
+                        }
+                        if (!userCommentPersisted) {
+                            MomentsProcessOutcome(MomentsProcessIssue.PERSISTENCE_FAILED)
+                        } else {
+                            MomentsProcessOutcome()
+                        }
+                    }
+                }
             }
-            momentRepository.updateComment(comment.copy(replyStatus = MomentReplyStatus.DONE))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return MomentsProcessOutcome(MomentsProcessIssue.GENERATION_FAILED)
         } finally {
             processingIds.remove(key)
         }
@@ -177,7 +262,7 @@ class MomentsVM(
     ): MomentReactionGeneration {
         val settings = settingsStore.settingsFlow.value
         val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
-            ?: return MomentReactionGeneration.Ready(null)
+            ?: return MomentReactionGeneration.ModelUnavailable
         val requiresOcrFallback = moment.imageUris.isNotEmpty() &&
             moment.imageDescription.isBlank() &&
             Modality.IMAGE !in model.inputModalities
@@ -236,10 +321,12 @@ class MomentsVM(
             conversationSystemPrompt = conversationSystemPrompt,
             maxTokens = 360,
         )
+        if (text.isBlank()) return MomentReactionGeneration.EmptyText
         val parsed = parseMomentReaction(text)
+            ?: return MomentReactionGeneration.InvalidResponse
         val imageParsed = parseImageDescriptionOutput(text)
         return MomentReactionGeneration.Ready(
-            parsed?.copy(comment = listOf(parsed.comment, imageParsed.imageDescription?.let {
+            parsed.copy(comment = listOf(parsed.comment, imageParsed.imageDescription?.let {
                 "[image_desc]$it[/image_desc]"
             }).filterNotNull().joinToString("\n"))
         )
@@ -251,9 +338,10 @@ class MomentsVM(
         target: MomentComment,
         assistant: Assistant,
         conversationSystemPrompt: String?,
-    ): String? {
+    ): CommentGenerationResult {
         val settings = settingsStore.settingsFlow.value
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return null
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+            ?: return CommentGenerationResult.ModelUnavailable
         val memories = if (assistant.useGlobalMemory) {
             memoryRepository.getGlobalMemories()
         } else {
@@ -276,7 +364,7 @@ class MomentsVM(
             Reply to this user comment:
             ${target.content}
         """.trimIndent()
-        return generateText(
+        val text = generateText(
             settings = settings,
             assistant = assistant,
             model = model,
@@ -285,6 +373,9 @@ class MomentsVM(
             conversationSystemPrompt = conversationSystemPrompt,
             maxTokens = 180,
         ).trim()
+        return text.takeIf { it.isNotBlank() }
+            ?.let(CommentGenerationResult::Ready)
+            ?: CommentGenerationResult.EmptyText
     }
 
     private suspend fun buildRecentChatContext(assistantId: Uuid): String {
@@ -360,8 +451,17 @@ class MomentsVM(
     )
 
     private sealed interface MomentReactionGeneration {
-        data class Ready(val reaction: MomentReaction?) : MomentReactionGeneration
+        data class Ready(val reaction: MomentReaction) : MomentReactionGeneration
+        data object EmptyText : MomentReactionGeneration
+        data object InvalidResponse : MomentReactionGeneration
+        data object ModelUnavailable : MomentReactionGeneration
         data object VisionModelSetupRequired : MomentReactionGeneration
+    }
+
+    private sealed interface CommentGenerationResult {
+        data class Ready(val text: String) : CommentGenerationResult
+        data object EmptyText : CommentGenerationResult
+        data object ModelUnavailable : CommentGenerationResult
     }
 
     private data class ParsedImageOutput(
@@ -397,6 +497,37 @@ class MomentsVM(
             }
         }.trim()
     }
+}
+
+data class MomentsRefreshReport(
+    val candidateCount: Int = 0,
+    val completedCount: Int = 0,
+    val emptyTextCount: Int = 0,
+    val invalidResponseCount: Int = 0,
+    val modelUnavailableCount: Int = 0,
+    val persistenceFailureCount: Int = 0,
+    val generationFailureCount: Int = 0,
+    val noVisibleCommentCount: Int = 0,
+    val visionModelRequiredCount: Int = 0,
+    val processingSkipped: Boolean = false,
+)
+
+private enum class MomentsProcessIssue {
+    EMPTY_TEXT,
+    INVALID_RESPONSE,
+    MODEL_UNAVAILABLE,
+    PERSISTENCE_FAILED,
+    GENERATION_FAILED,
+    NO_VISIBLE_COMMENT,
+    VISION_MODEL_REQUIRED,
+    ALREADY_PROCESSING,
+}
+
+private data class MomentsProcessOutcome(
+    val issue: MomentsProcessIssue? = null,
+) {
+    val completed: Boolean
+        get() = issue == null || issue == MomentsProcessIssue.NO_VISIBLE_COMMENT
 }
 
 private fun Settings.hasConfiguredVisionOcrModel(): Boolean {

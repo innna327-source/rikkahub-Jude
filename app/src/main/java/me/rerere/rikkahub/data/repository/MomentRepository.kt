@@ -228,6 +228,19 @@ class MomentRepository(
             limit = limit,
         ).map { it.toMoment() }
 
+    suspend fun getRefreshUserMoments(assistantId: Uuid, limit: Int): List<Moment> {
+        return dao.getMoments(assistantId.toString())
+            .filter { moment ->
+                moment.author == MomentAuthor.USER.value && (
+                    moment.replyStatus == MomentReplyStatus.PENDING.value ||
+                        moment.replyStatus == MomentReplyStatus.DONE.value && moment.aiReplyContent.isBlank()
+                    )
+            }
+            .sortedBy { it.replyDueAt }
+            .take(limit)
+            .map { it.toMoment() }
+    }
+
     suspend fun getDueUserComments(assistantId: Uuid, now: Long, limit: Int): List<MomentComment> =
         dao.getDueComments(
             assistantId = assistantId.toString(),
@@ -236,6 +249,25 @@ class MomentRepository(
             now = now,
             limit = limit,
         ).map { it.toMomentComment() }
+
+    suspend fun getRefreshUserComments(assistantId: Uuid, limit: Int): List<MomentComment> {
+        val candidates = dao.getMoments(assistantId.toString()).flatMap { moment ->
+            val comments = dao.getComments(moment.id)
+            comments.filter { comment ->
+                val isUserComment = comment.author == MomentAuthor.USER.value
+                val isPending = comment.replyStatus == MomentReplyStatus.PENDING.value
+                val isCompletedWithoutReply = comment.replyStatus == MomentReplyStatus.DONE.value &&
+                    comments.none {
+                        it.author == MomentAuthor.ASSISTANT.value && it.createdAt > comment.createdAt
+                    }
+                isUserComment && (isPending || isCompletedWithoutReply)
+            }
+        }
+        return candidates
+            .sortedWith(compareBy({ it.replyDueAt ?: Long.MAX_VALUE }, { it.createdAt }))
+            .take(limit)
+            .map { it.toMomentComment() }
+    }
 
     suspend fun getComments(momentId: Uuid): List<MomentComment> =
         dao.getComments(momentId.toString()).map { it.toMomentComment() }

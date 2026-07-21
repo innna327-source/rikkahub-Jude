@@ -124,6 +124,12 @@ fun MomentsOverlay(
         }
     }
 
+    LaunchedEffect(vm, context) {
+        vm.refreshReports.collect { report ->
+            Toast.makeText(context, report.toUserMessage(context), Toast.LENGTH_LONG).show()
+        }
+    }
+
     LaunchedEffect(assistantId) {
         vm.markViewed(assistantId)
         vm.processDue(assistantId, assistant, conversationSystemPrompt)
@@ -160,7 +166,7 @@ fun MomentsOverlay(
                             processing = processing,
                             onDismiss = onDismiss,
                             onRefresh = {
-                                vm.processDue(assistantId, assistant, conversationSystemPrompt)
+                                vm.processDue(assistantId, assistant, conversationSystemPrompt, manual = true)
                                 vm.markViewed(assistantId)
                             },
                             onPost = {
@@ -235,6 +241,41 @@ fun MomentsOverlay(
             }
         )
     }
+}
+
+private fun MomentsRefreshReport.toUserMessage(context: Context): String {
+    if (processingSkipped) {
+        return context.getString(R.string.moments_refresh_processing)
+    }
+    if (candidateCount == 0) {
+        return context.getString(R.string.moments_refresh_no_due)
+    }
+
+    val details = buildList {
+        add(context.getString(R.string.moments_refresh_summary, candidateCount, completedCount))
+        if (emptyTextCount > 0) {
+            add(context.getString(R.string.moments_refresh_empty_text, emptyTextCount))
+        }
+        if (invalidResponseCount > 0) {
+            add(context.getString(R.string.moments_refresh_invalid_response, invalidResponseCount))
+        }
+        if (modelUnavailableCount > 0) {
+            add(context.getString(R.string.moments_refresh_model_unavailable, modelUnavailableCount))
+        }
+        if (persistenceFailureCount > 0) {
+            add(context.getString(R.string.moments_refresh_persistence_failed, persistenceFailureCount))
+        }
+        if (generationFailureCount > 0) {
+            add(context.getString(R.string.moments_refresh_generation_failed, generationFailureCount))
+        }
+        if (noVisibleCommentCount > 0) {
+            add(context.getString(R.string.moments_refresh_no_visible_comment, noVisibleCommentCount))
+        }
+        if (visionModelRequiredCount > 0) {
+            add(context.getString(R.string.moments_refresh_vision_model_required, visionModelRequiredCount))
+        }
+    }
+    return details.joinToString("；")
 }
 
 @Composable

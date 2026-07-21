@@ -147,6 +147,16 @@
   <string name="anonymous_question_box_user">用户问题</string>
   <string name="anonymous_question_box_assistant">AI 问题</string>
   <string name="moments_vision_model_required">当前聊天模型不支持识图，请在设置 → 默认模型 → OCR 模型中接入可识图模型。</string>
+  <string name="moments_refresh_processing">刷新已在进行中，请稍后再试。</string>
+  <string name="moments_refresh_no_due">刷新完成：当前没有待处理或待重试内容。</string>
+  <string name="moments_refresh_summary">刷新完成：检查 %1$d 条，成功写入 %2$d 条。</string>
+  <string name="moments_refresh_empty_text">模型返回文本为空 %1$d 条，已保留重试。</string>
+  <string name="moments_refresh_invalid_response">模型返回内容无法解析 %1$d 条，已保留重试。</string>
+  <string name="moments_refresh_model_unavailable">没有找到可用模型 %1$d 条。</string>
+  <string name="moments_refresh_persistence_failed">生成成功但 Room 写入未确认 %1$d 条。</string>
+  <string name="moments_refresh_generation_failed">生成过程异常 %1$d 条，已保留重试。</string>
+  <string name="moments_refresh_no_visible_comment">已处理但没有文字评论 %1$d 条，可能只有点赞。</string>
+  <string name="moments_refresh_vision_model_required">需要识图模型 %1$d 条。</string>
   <string name="assistant_page_strict">Strict</string>
   <string name="assistant_page_system_prompt">System Prompt</string>
   <string name="assistant_page_tab_basic">Basic Settings</string>
