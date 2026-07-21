@@ -1,45 +1,62 @@
 <div align="center">
   <img src="docs/icon.png" alt="App 图标" width="100" />
-  <h1>RikkaHub Auto Compress</h1>
+  <h1>RikkaHub Jude</h1>
 
-一个原生Android LLM 聊天客户端，支持切换不同的供应商进行聊天 🤖💬
+  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
+  [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
+
+一个支持切换不同供应商进行对话的原生 Android LLM 聊天客户端 🤖💬
+
+点击加入 Discord 服务器 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
 
 [English](README.md) | [繁體中文](README_ZH_TW.md) | 简体中文
-
-点击链接加入群聊 👉 [【RikkaHub】](https://qm.qq.com/q/I8MSU0FkOu)
-
 </div>
 
 > [!IMPORTANT]
-> 这是基于 [RikkaHub](https://github.com/rikkahub/rikkahub) 的**非官方二次开发版本**，当前公开源码基于 RikkaHub `2.2.5` 代码线，并合入部分后续修复及下述二创功能；本项目不代表 RikkaHub 官方版本。具体可下载版本以本仓库的 [Releases](https://github.com/innna327-source/rikkahub-auto-compress/releases) 页面为准。
+> 这是基于 [RikkaHub](https://github.com/rikkahub/rikkahub) 的**非官方社区维护 fork**，不是 RikkaHub 官方版本。
+> 本仓库保留上游 Git 历史，并持续维护自动滚动摘要、上下文压缩、朋友圈和匿名提问箱等功能。
+> 可下载版本以本 fork 的 [Releases 页面](https://github.com/innna327-source/rikkahub-Jude/releases) 为准。
 
 <div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
+  <img src="docs/img/chat.png" alt="聊天界面" width="150" />
+  <img src="docs/img/desktop.png" alt="模型选择器" width="450" />
 </div>
 
+## 🚀 下载本 fork
 
-## 🚀 下载
+🔗 **[前往 GitHub Releases 下载 APK](https://github.com/innna327-source/rikkahub-Jude/releases)**
 
-🔗 **[前往 GitHub Releases 下载 APK](https://github.com/innna327-source/rikkahub-auto-compress/releases)**
+如果只是安装应用，请不要点击 **Code → Download ZIP**，那里下载的是源代码，不是 APK。
 
-如果只是安装应用，请不要点击 `Code → Download ZIP`，那里下载的是源代码，不是 APK。
-
-当前发布包为 `arm64-v8a` Debug APK。安装前请先备份应用数据。由于本二创版本与官方版本可能使用不同签名，Android 可能不允许直接覆盖安装；若提示签名冲突，请务必先在原应用内导出备份，再考虑卸载旧版本。
+默认 Debug 构建为 universal APK。安装前请先备份应用数据。由于本 fork 与官方应用可能使用不同签名，Android 可能不允许直接覆盖安装；如果提示签名冲突，请先导出备份，再考虑卸载已有版本。
 
 需要官方版本时，请前往 [RikkaHub 上游项目](https://github.com/rikkahub/rikkahub)。
 
-## 🌿 本二创主要新增功能
+## 🌿 本 fork 维护和新增的内容
 
-- **自动滚动摘要与上下文压缩**：保留最近消息，自动压缩较早的可见对话；摘要可查看、编辑，并可设置目标长度。
-- **长对话分块压缩**：超长历史和已有摘要会按容量分块处理，避免一次请求塞入过多内容。
-- **独立压缩 API 与模型**：压缩任务可单独配置 OpenAI 兼容地址、API Key、模型、Chat Completions 路径或 Responses API，不占用普通聊天模型配置。
-- **独立 OCR API 与模型**：OCR 可以使用单独的 OpenAI 兼容接口和模型，不影响正常聊天提供商。
-- **分段 TTS 播放**：支持按段落朗读回复，并提供仅朗读引用、仅朗读英文和生成后自动播放等选项。
+- **自动滚动摘要与上下文压缩**：保留最近消息，持续压缩较早的可见历史，并支持查看、编辑摘要和配置目标长度。
+- **长对话分块压缩**：超长历史和已有摘要会按容量分块处理，避免一次请求携带过多内容。
+- **独立压缩 API 与模型**：压缩任务可以单独配置 OpenAI 兼容接口、API Key、模型、Chat Completions 路径或 Responses API。
+- **独立 OCR API 与模型**：OCR 可以使用单独的 OpenAI 兼容接口和模型，不影响普通聊天供应商。
+- **分段 TTS 控制**：支持按段落朗读回复，并提供仅朗读引用、仅朗读英文和生成后自动播放等选项。
 - **使用统计与提醒**：提供本地应用使用统计和可配置的使用时长提醒。
+- **朋友圈**：按助手隔离的动态时间线，支持 AI 点赞、评论、删除、日期筛选和手动刷新诊断。
+- **匿名提问箱**：按助手隔离的匿名问题，支持延迟 AI 回答、用户一次性回答以及 AI 后续评论。
+- **备份与发布维护**：兼容较新的备份格式，恢复本地文件，提供请求日志、universal Debug APK 打包和优先检查 universal 包的更新逻辑。
 
-除 Release 说明特别标注外，本版本仍保留下面列出的 RikkaHub 上游功能。
+除 Release 说明特别标注外，本 fork 仍保留下方列出的 RikkaHub 上游功能。
 
+## 🧭 仓库归属与贡献说明
+
+本仓库由 **[innna327-source](https://github.com/innna327-source)** 维护，是个人/社区 fork，不是官方 RikkaHub 仓库，也不表示代码库的每一部分都是维护者从零编写的。
+
+本仓库保留了历史 Git 提交。因此，GitHub 在查看文件历史或提交作者时，可能显示 `RikkaHub Public Release` 等上游或继承的提交身份。这些名称只代表对应的 Git 元数据，不代表本仓库的所有者或维护者。上游项目及其贡献者的原始工作仍应得到相应署名；本仓库实际维护范围见上面的“本 fork 维护和新增的内容”。
+
+为避免混淆：
+
+- **上游项目：** [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
+- **本 fork：** [innna327-source/rikkahub-Jude](https://github.com/innna327-source/rikkahub-Jude)
+- **本 fork 维护者：** [innna327-source](https://github.com/innna327-source)
 
 ## 💖 赞助商
 
@@ -51,48 +68,48 @@
 
 ## ✨ 功能特色
 
-- 🎨 现代化安卓APP设计（Material You / 预测性返回）
-- 🌙 暗色模式
-- 🖥️ Web多端访问支持
+- 🎨 Material You 设计和 🌙 深色模式
+- 🔄 多 AI 供应商支持：自定义 API / URL / 模型（兼容 OpenAI、Google、Anthropic 等接口）
+- 🖼️ 多模态输入支持（图片、文本、PDF、Docx）
+- 🖥️ Web 多端访问
 - 🛠️ MCP 支持
-- 🔄 多种类型的供应商支持，自定义 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
-- 🖼️ 多模态输入支持
-- 📝 Markdown 渲染（支持代码高亮、数学公式、表格、Mermaid）
-- 🔍 搜索功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
+- 📝 Markdown 渲染（代码高亮、LaTeX 公式、表格、Mermaid）
+- 🪾 消息分支
+- 🔍 搜索能力（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity 等）
 - 🧩 Prompt 变量（模型名称、时间等）
-- 🤳 二维码导出和导入提供商
-- 🤖 智能体自定义
-- 🧠 类ChatGPT记忆功能
-- 📝 AI翻译
-- 🌐 自定义HTTP请求头和请求体
+- 🤳 供应商二维码导入和导出
+- 🤖 Agent 自定义
+- 🧠 类 ChatGPT 记忆功能
+- 📝 AI 翻译
+- 🌐 自定义 HTTP 请求头和请求体
+- 💌 Silly Tavern 角色卡导入
 
 ## ✨ 贡献
 
-本项目使用[Android Studio](https://developer.android.com/studio)开发，欢迎提交PR
+本项目使用 [Android Studio](https://developer.android.com/studio) 开发，欢迎提交 PR。
 
-技术栈文档:
+技术栈：
 
-- [Kotlin](https://kotlinlang.org/) (开发语言)
-- [Koin](https://insert-koin.io/) (依赖注入)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI 框架)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore?hl=zh-cn#preferences-datastore) (
-  偏好数据存储)
-- [Room](https://developer.android.com/training/data-storage/room) (数据库)
-- [Coil](https://coil-kt.github.io/coil/) (图片加载)
-- [Material You](https://m3.material.io/) (UI 设计)
-- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) (导航)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP 客户端)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
-- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (图标库)
+- [Kotlin](https://kotlinlang.org/)（开发语言）
+- [Koin](https://insert-koin.io/)（依赖注入）
+- [Jetpack Compose](https://developer.android.com/jetpack/compose)（UI 框架）
+- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore)（偏好数据存储）
+- [Room](https://developer.android.com/training/data-storage/room)（数据库）
+- [Coil](https://coil-kt.github.io/coil/)（图片加载）
+- [Material You](https://m3.material.io/)（UI 设计）
+- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation)（导航）
+- [Okhttp](https://square.github.io/okhttp/)（HTTP 客户端）
+- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)（JSON 序列化）
+- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide)（图标库）
 
 > [!TIP]
 > 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
 
-> [!IMPORTANT]  
-> 以下PR将被拒绝：
-> 1. 添加新语言，因为添加新语言会增加后续本地化的工作量
-> 2. 添加新功能，这个项目是有态度的
-> 3. AI生成的大规模重构和更改
+> [!IMPORTANT]
+> 以下 PR 将被拒绝：
+> 1. 翻译相关修改，例如添加新语言或更新现有翻译；
+> 2. 添加新功能，本项目对功能方向有明确取舍；
+> 3. 大规模重构以及由 AI 生成的改动。
 
 ## 💰 捐赠
 
@@ -101,7 +118,7 @@
 
 ## ⭐ Star History
 
-如果喜欢这个项目，请给个Star ⭐
+如果喜欢这个项目，欢迎点个 Star ⭐
 
 [![Star History Chart](https://api.star-history.com/svg?repos=re-ovo/rikkahub&type=Date)](https://star-history.com/#re-ovo/rikkahub&Date)
 
