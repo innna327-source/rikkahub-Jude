@@ -83,6 +83,7 @@ import me.rerere.rikkahub.data.repository.MomentComment
 import me.rerere.rikkahub.data.repository.MomentEntry
 import me.rerere.rikkahub.data.repository.MomentProfile
 import me.rerere.rikkahub.data.repository.MomentRepository
+import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import java.util.Calendar
 import kotlin.uuid.Uuid
@@ -527,15 +528,18 @@ private fun MomentItem(
 @Composable
 private fun MomentImages(imageUris: List<String>) {
     if (imageUris.isEmpty()) return
+    val visibleUris = imageUris.take(MomentRepository.MAX_IMAGES)
+    var showImagePreview by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(6.dp)
-    if (imageUris.size == 1) {
+    if (visibleUris.size == 1) {
         AsyncImage(
-            model = imageUris.first(),
+            model = visibleUris.first(),
             contentDescription = null,
             modifier = Modifier
                 .fillMaxWidth(0.72f)
                 .heightIn(min = 140.dp, max = 260.dp)
-                .clip(shape),
+                .clip(shape)
+                .clickable { showImagePreview = true },
             contentScale = ContentScale.Crop,
         )
     } else {
@@ -545,17 +549,23 @@ private fun MomentImages(imageUris: List<String>) {
             maxItemsInEachRow = 3,
             modifier = Modifier.fillMaxWidth()
         ) {
-            imageUris.take(MomentRepository.MAX_IMAGES).forEach { uri ->
+            visibleUris.forEach { uri ->
                 AsyncImage(
                     model = uri,
                     contentDescription = null,
                     modifier = Modifier
                         .weight(1f)
                         .aspectRatio(1f)
-                        .clip(shape),
+                        .clip(shape)
+                        .clickable { showImagePreview = true },
                     contentScale = ContentScale.Crop,
                 )
             }
+        }
+    }
+    if (showImagePreview) {
+        ImagePreviewDialog(images = visibleUris) {
+            showImagePreview = false
         }
     }
 }
