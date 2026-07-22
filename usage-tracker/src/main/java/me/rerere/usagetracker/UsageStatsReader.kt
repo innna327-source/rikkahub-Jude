@@ -113,17 +113,17 @@ class UsageStatsReader(private val context: Context) {
         val usageStatsManager = appContext.getSystemService<UsageStatsManager>() ?: return@withContext null
         val nowMillis = System.currentTimeMillis()
         val queryStartMillis = (nowMillis - FOREGROUND_STATE_LOOKBACK_MILLIS).coerceAtLeast(0L)
-        runCatching {
-            usageStatsManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_BEST,
-                queryStartMillis,
-                nowMillis,
-            )
-                .filter { it.lastTimeUsed > 0L }
-                .maxByOrNull { it.lastTimeUsed }
-                ?.packageName
-        }.getOrNull()
-            ?: usageStatsManager.loadCurrentForegroundPackageFromEvents(queryStartMillis, nowMillis)
+        usageStatsManager.loadCurrentForegroundPackageFromEvents(queryStartMillis, nowMillis)
+            ?: runCatching {
+                usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_BEST,
+                    queryStartMillis,
+                    nowMillis,
+                )
+                    .filter { it.lastTimeUsed > 0L }
+                    .maxByOrNull { it.lastTimeUsed }
+                    ?.packageName
+            }.getOrNull()
     }
 
     private fun UsageStatsManager.loadCurrentForegroundPackageFromEvents(

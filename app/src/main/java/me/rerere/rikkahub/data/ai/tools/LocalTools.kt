@@ -486,6 +486,7 @@ class LocalTools(
                 Use only when the user asks to lock/unlock usage, enforce a break, or check lock status.
                 The global usage lock switch must be enabled in Usage Tracker settings.
                 For action=lock, provide one of: duration_minutes, unlock_at_timestamp_ms, or unlock_at_iso.
+                For action=lock, provide target_package_name for the app being locked, or use RikkaHub's own package name for the current app.
                 If the target is RikkaHub itself, set target_package_name to ${context.packageName} so the app shows a compact floating window instead of a blocking full-screen overlay.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -518,7 +519,7 @@ class LocalTools(
                         })
                         put("target_package_name", buildJsonObject {
                             put("type", "string")
-                            put("description", "Optional package name of the app being locked. Use the current app package when locking RikkaHub itself.")
+                            put("description", "Package name of the app being locked. Required for action=lock; use the current app package when locking RikkaHub itself.")
                         })
                         put("target_label", buildJsonObject {
                             put("type", "string")
@@ -592,33 +593,47 @@ class LocalTools(
                                 targetLabel.equals("rikkahub", ignoreCase = true) -> context.packageName
                                 else -> null
                             }
-                            UsageReminderService.lock(
-                                context = context,
-                                lockedUntilMillis = lockedUntilMillis,
-                                reason = reason,
-                                source = "ai_tool",
-                                targetPackageName = targetPackageName,
-                                targetLabel = targetLabel.ifBlank {
-                                    if (targetPackageName == context.packageName) "RikkaHub" else ""
-                                },
-                            )
-                            listOf(
-                                UIMessagePart.Text(
-                                    buildJsonObject {
-                                        put("success", true)
-                                        put("locked_until_timestamp_ms", lockedUntilMillis)
-                                        put("reason", reason)
-                                        put("usage_access_granted", usageStatsReader.hasUsageAccess())
-                                        put("overlay_permission_granted", UsageReminderService.canDrawOverlays(context))
-                                        put(
-                                            "target_requires_foreground_monitor",
-                                            targetPackageName != null && targetPackageName != context.packageName
-                                        )
-                                        put("monitoring_started", true)
-                                        targetPackageName?.let { put("target_package_name", it) }
-                                    }.toString()
+                            if (targetPackageName == null) {
+                                listOf(
+                                    UIMessagePart.Text(
+                                        buildJsonObject {
+                                            put("success", false)
+                                            put(
+                                                "error",
+                                                "Provide target_package_name for the app to lock, or target_label=RikkaHub to lock RikkaHub input."
+                                            )
+                                        }.toString()
+                                    )
                                 )
-                            )
+                            } else {
+                                UsageReminderService.lock(
+                                    context = context,
+                                    lockedUntilMillis = lockedUntilMillis,
+                                    reason = reason,
+                                    source = "ai_tool",
+                                    targetPackageName = targetPackageName,
+                                    targetLabel = targetLabel.ifBlank {
+                                        if (targetPackageName == context.packageName) "RikkaHub" else ""
+                                    },
+                                )
+                                listOf(
+                                    UIMessagePart.Text(
+                                        buildJsonObject {
+                                            put("success", true)
+                                            put("locked_until_timestamp_ms", lockedUntilMillis)
+                                            put("reason", reason)
+                                            put("usage_access_granted", usageStatsReader.hasUsageAccess())
+                                            put("overlay_permission_granted", UsageReminderService.canDrawOverlays(context))
+                                            put(
+                                                "target_requires_foreground_monitor",
+                                                targetPackageName != context.packageName
+                                            )
+                                            put("monitoring_started", true)
+                                            put("target_package_name", targetPackageName)
+                                        }.toString()
+                                    )
+                                )
+                            }
                         }
                     }
 

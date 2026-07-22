@@ -416,7 +416,7 @@ class UsageReminderService : Service() {
             reader.loadCurrentForegroundPackageName()
         }
         val action = when {
-            targetPackageName == null -> "global_overlay"
+            targetPackageName == null -> "notification_only"
             targetPackageName == packageName -> "self_app_input_block"
             foregroundPackageName == targetPackageName -> "redirect_home"
             else -> "no_match_remove"
@@ -428,7 +428,10 @@ class UsageReminderService : Service() {
                 "overlay=${canDrawOverlays(this)} monitorActive=${monitorJob?.isActive == true}"
         )
         when {
-            targetPackageName == null -> showLockOverlay(lock)
+            targetPackageName == null -> {
+                removeLockOverlay()
+                sendLockNotification(lock)
+            }
             targetPackageName == packageName -> removeLockOverlay()
             foregroundPackageName == targetPackageName -> redirectTargetToHome(lock)
             else -> removeLockOverlay()
@@ -450,7 +453,6 @@ class UsageReminderService : Service() {
         }
         lastTargetRedirectPackageName = targetPackageName
         lastTargetRedirectAtMillis = now
-        removeLockOverlay()
         logUsageLock("redirectTargetToHome: launching HOME target=$targetPackageName")
         runCatching {
             startActivity(
