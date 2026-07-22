@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.GenerationChunk
@@ -23,6 +24,18 @@ import me.rerere.rikkahub.data.repository.AnonymousQuestionReplyStatus
 import me.rerere.rikkahub.data.repository.AnonymousQuestionRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlin.uuid.Uuid
+
+internal const val ANONYMOUS_RESPONSE_MAX_TOKENS = 512
+
+internal fun Assistant.forAnonymousQuestionGeneration(): Assistant {
+    return copy(streamOutput = false, reasoningLevel = ReasoningLevel.OFF)
+}
+
+internal fun List<UIMessagePart>.anonymousQuestionVisibleText(): String {
+    return filterIsInstance<UIMessagePart.Text>()
+        .joinToString("\n") { it.text }
+        .trim()
+}
 
 class AnonymousQuestionBoxVM(
     private val settingsStore: SettingsStore,
@@ -106,7 +119,7 @@ class AnonymousQuestionBoxVM(
                 Anonymous question:
                 $question
             """.trimIndent(),
-            maxTokens = 240,
+            maxTokens = ANONYMOUS_RESPONSE_MAX_TOKENS,
         )
     }
 
@@ -127,7 +140,7 @@ class AnonymousQuestionBoxVM(
                 Anonymous answer:
                 $answer
             """.trimIndent(),
-            maxTokens = 180,
+            maxTokens = ANONYMOUS_RESPONSE_MAX_TOKENS,
         )
     }
 
@@ -149,7 +162,8 @@ class AnonymousQuestionBoxVM(
             settings = settings,
             model = model,
             messages = listOf(UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text(prompt)))),
-            assistant = assistant.copy(streamOutput = false),
+            // The 200-character rule is expressed in the prompt; this budget is a provider token limit.
+            assistant = assistant.forAnonymousQuestionGeneration(),
             conversationSystemPrompt = conversationSystemPrompt,
             memories = memories,
             tools = emptyList(),
@@ -157,11 +171,9 @@ class AnonymousQuestionBoxVM(
             maxTokensOverride = maxTokens,
         ).collect { chunk ->
             if (chunk is GenerationChunk.Messages) {
-                output = chunk.messages.lastOrNull()?.parts?.joinToString("\n") { part ->
-                    if (part is UIMessagePart.Text) part.text else ""
-                }.orEmpty()
+                output = chunk.messages.lastOrNull()?.parts?.anonymousQuestionVisibleText().orEmpty()
             }
         }
-        return output.trim().takeIf { it.isNotBlank() }
+        return output.takeIf { it.isNotBlank() }
     }
 }

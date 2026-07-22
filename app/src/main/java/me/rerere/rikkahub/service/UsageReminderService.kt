@@ -768,11 +768,19 @@ class UsageReminderService : Service() {
         val unlockText = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
             .format(Date(lock.lockedUntilMillis))
         val reasonText = lock.reason.ifBlank { getString(R.string.usage_lock_overlay_title) }
-        val content = getString(
-            R.string.usage_lock_notification_content,
-            reasonText,
-            unlockText,
-        )
+        val content = if (canDrawOverlays(this)) {
+            buildString {
+                append(reasonText)
+                append('\n')
+                append(getString(R.string.usage_lock_overlay_until, unlockText))
+            }
+        } else {
+            getString(
+                R.string.usage_lock_notification_content,
+                reasonText,
+                unlockText,
+            )
+        }
         runCatching {
             NotificationManagerCompat.from(this).notify(
                 NOTIFICATION_ID_LOCK,
