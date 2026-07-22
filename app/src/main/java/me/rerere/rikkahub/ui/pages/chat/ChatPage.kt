@@ -265,9 +265,15 @@ private fun ChatPageContent(
     var showCompressedMessages by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var summaryEditorVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var voiceCallVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var awaitInitialVoiceCallReply by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var initialVoiceCallAssistantMessageId by rememberSaveable(conversation.id) { mutableStateOf<String?>(null) }
+    var handledIncomingVoiceCallId by rememberSaveable(conversation.id) { mutableStateOf<String?>(null) }
     var momentsVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var anonymousQuestionBoxVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     val assistant = setting.getAssistantById(conversation.assistantId) ?: setting.getCurrentAssistant()
+    val incomingVoiceCall = conversation.currentMessages
+        .pendingIncomingVoiceCall()
+        ?.takeUnless { it.toolCallId == handledIncomingVoiceCallId }
     val momentsEnabled = assistant.momentsEnabled
     val momentScopeId = conversation.momentScopeId(assistant)
     val anonymousQuestionBoxEnabled = assistant.anonymousQuestionBoxEnabled
@@ -326,6 +332,8 @@ private fun ChatPageContent(
                         summaryEditorVisible = it
                     },
                     onOpenVoiceCall = {
+                        awaitInitialVoiceCallReply = false
+                        initialVoiceCallAssistantMessageId = null
                         voiceCallVisible = true
                     },
                     showMoments = momentsEnabled,
@@ -526,16 +534,20 @@ private fun ChatPageContent(
         }
         VoiceCallOverlay(
             visible = voiceCallVisible,
+            awaitInitialAssistantReply = awaitInitialVoiceCallReply,
+            initialAssistantMessageId = initialVoiceCallAssistantMessageId,
             conversation = conversation,
             userAvatar = setting.displaySetting.userAvatar,
             userName = setting.displaySetting.userNickname.ifBlank { "我" },
-            assistantAvatar = setting.getCurrentAssistant().avatar,
-            assistantName = setting.getCurrentAssistant().name.ifBlank { "AI" },
+            assistantAvatar = assistant.avatar,
+            assistantName = assistant.name.ifBlank { "AI" },
             loadingJob = loadingJob,
             hasChatModel = currentChatModel != null,
             vm = vm,
             onDismiss = {
                 voiceCallVisible = false
+                awaitInitialVoiceCallReply = false
+                initialVoiceCallAssistantMessageId = null
             },
             onMessageSubmitted = {
                 scope.launch {
@@ -543,6 +555,33 @@ private fun ChatPageContent(
                 }
             }
         )
+        incomingVoiceCall?.let { request ->
+            IncomingVoiceCallOverlay(
+                request = request,
+                userAvatar = setting.displaySetting.userAvatar,
+                userName = setting.displaySetting.userNickname.ifBlank { "我" },
+                assistantAvatar = assistant.avatar,
+                assistantName = assistant.name.ifBlank { "AI" },
+                onAccept = {
+                    handledIncomingVoiceCallId = request.toolCallId
+                    awaitInitialVoiceCallReply = true
+                    initialVoiceCallAssistantMessageId = request.assistantMessageId
+                    voiceCallVisible = true
+                    vm.handleToolApproval(
+                        toolCallId = request.toolCallId,
+                        approved = true,
+                    )
+                },
+                onReject = { reason ->
+                    handledIncomingVoiceCallId = request.toolCallId
+                    vm.handleToolApproval(
+                        toolCallId = request.toolCallId,
+                        approved = false,
+                        reason = reason,
+                    )
+                },
+            )
+        }
         MomentsOverlay(
             visible = momentsVisible && momentsEnabled,
             assistantId = momentScopeId,

@@ -26,6 +26,7 @@ import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.MomentRepository
 import me.rerere.rikkahub.data.repository.AnonymousQuestionRepository
+import me.rerere.rikkahub.data.voice.VOICE_CALL_UNAVAILABLE_MESSAGE
 import me.rerere.rikkahub.service.UsageReminderService
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
@@ -40,6 +41,8 @@ import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.uuid.Uuid
+
+const val REQUEST_VOICE_CALL_TOOL_NAME = "request_voice_call"
 
 @Serializable
 sealed class LocalToolOption {
@@ -70,6 +73,10 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("weather")
     data object Weather : LocalToolOption()
+
+    @Serializable
+    @SerialName("voice_call")
+    data object VoiceCall : LocalToolOption()
 }
 
 class LocalTools(
@@ -424,6 +431,52 @@ class LocalTools(
             }
         )
     }
+
+    private fun requestVoiceCallTool(voiceCallConfigured: Boolean) = Tool(
+            name = REQUEST_VOICE_CALL_TOOL_NAME,
+            description = """
+                Invite the user to start a voice call in the current chat.
+                Use this sparingly, only when a real-time spoken conversation would feel more natural or helpful than text.
+                Provide one short, natural reason that can be shown on the incoming-call screen.
+                The user may answer, decline, or miss the call, and the result will be returned to you.
+                当前对话确实更适合实时语音交流时，才主动邀请用户通话；不要频繁发起。
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("reason", buildJsonObject {
+                            put("type", "string")
+                            put("description", "A short natural reason for calling, suitable for the incoming-call screen.")
+                        })
+                    },
+                    required = listOf("reason")
+                )
+            },
+            needsApproval = voiceCallConfigured,
+            execute = { params ->
+                if (!voiceCallConfigured) {
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", false)
+                                put("error", VOICE_CALL_UNAVAILABLE_MESSAGE)
+                            }.toString()
+                        )
+                    )
+                } else {
+                    val reason = params.jsonObject["reason"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                    listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("success", true)
+                                put("status", "answered")
+                                put("reason", reason)
+                            }.toString()
+                        )
+                    )
+                }
+            }
+        )
 
     val usageLockTool by lazy {
         Tool(
@@ -878,6 +931,7 @@ class LocalTools(
     fun getTools(
         options: List<LocalToolOption>,
         usageLockEnabled: Boolean = false,
+        voiceCallConfigured: Boolean = false,
         momentAssistantId: Uuid? = null,
         anonymousQuestionScopeId: Uuid? = null,
     ): List<Tool> {
@@ -905,6 +959,9 @@ class LocalTools(
         }
         if (usageLockEnabled) {
             tools.add(usageLockTool)
+        }
+        if (options.contains(LocalToolOption.VoiceCall)) {
+            tools.add(requestVoiceCallTool(voiceCallConfigured))
         }
         if (momentAssistantId != null) {
             tools.add(postMomentTool(momentAssistantId))

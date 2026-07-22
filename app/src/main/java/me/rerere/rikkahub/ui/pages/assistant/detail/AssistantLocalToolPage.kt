@@ -88,6 +88,38 @@ private fun AssistantLocalToolContent(
         CardGroup {
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_moments_enabled))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_moments_enabled_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.momentsEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdate(assistant.copy(momentsEnabled = enabled))
+                        }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_anonymous_question_box_enabled))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_anonymous_question_box_enabled_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.anonymousQuestionBoxEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdate(assistant.copy(anonymousQuestionBoxEnabled = enabled))
+                        }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_javascript_engine_title))
                 },
                 supportingContent = {
@@ -181,6 +213,20 @@ private fun AssistantLocalToolContent(
                     Switch(
                         checked = assistant.localTools.contains(LocalToolOption.Weather),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Weather, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_voice_call_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_voice_call_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.VoiceCall),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.VoiceCall, it) }
                     )
                 }
             )

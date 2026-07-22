@@ -97,6 +97,8 @@
   <string name="assistant_page_local_tools_usage_stats_title">使用情况</string>
   <string name="assistant_page_local_tools_weather_desc">允许 AI 在你确认后读取本机定位天气</string>
   <string name="assistant_page_local_tools_weather_title">天气</string>
+  <string name="assistant_page_local_tools_voice_call_desc">允许 AI 在适合时主动邀请你进行语音通话</string>
+  <string name="assistant_page_local_tools_voice_call_title">主动语音通话</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -132,7 +134,7 @@
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
   <string name="assistant_page_stream_output">Stream Output</string>
   <string name="assistant_page_stream_output_desc">Whether to enable streaming output for messages</string>
-  <string name="assistant_page_moments_chat_style">朋友圈聊天模式</string>
+  <string name="assistant_page_moments_chat_style">聊天模式</string>
   <string name="assistant_page_moments_chat_style_desc">开启后，当前助手回复的每段文字会用米白色消息框包裹；深色模式下使用深色消息框。</string>
   <string name="assistant_page_moments_enabled">朋友圈</string>
   <string name="assistant_page_moments_enabled_desc">开启后，当前助手会显示朋友圈入口，并可在合适时发布、点赞或评论动态。</string>
@@ -365,6 +367,7 @@
   <string name="error_title_send_message">Message send failed</string>
   <string name="error_title_tool_approval">Tool call processing failed</string>
   <string name="error_title_tool_unavailable">Tool unavailable</string>
+  <string name="error_title_voice_call">Voice call unavailable</string>
   <string name="error_title_translate_message">Message translation failed</string>
   <string name="expand_translation">Expand Translation</string>
   <string name="export_cancel">Cancel</string>

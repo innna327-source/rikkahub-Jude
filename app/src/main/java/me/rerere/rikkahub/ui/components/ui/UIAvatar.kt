@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -86,7 +87,8 @@ fun UIAvatar(
     modifier: Modifier = Modifier,
     loading: Boolean = false,
     onUpdate: ((Avatar) -> Unit)? = null,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    avatarSize: Dp = 32.dp,
 ) {
     val filesManager: FilesManager = koinInject()
     var showPickOption by remember { mutableStateOf(false) }
@@ -105,7 +107,7 @@ fun UIAvatar(
         }
     }
 
-    Box(modifier = modifier.size(32.dp)) {
+    Box(modifier = modifier.size(avatarSize)) {
         Surface(
             shape = rememberAvatarShape(loading),
             modifier = Modifier.fillMaxSize(),

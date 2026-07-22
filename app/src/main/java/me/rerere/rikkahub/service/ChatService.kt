@@ -56,6 +56,8 @@ import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.REQUEST_VOICE_CALL_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.files.SkillManager
@@ -75,9 +77,11 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.voice.VOICE_CALL_UNAVAILABLE_MESSAGE
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AutoCompressConfig
 import me.rerere.rikkahub.data.model.MessageNode
@@ -121,6 +125,14 @@ private const val VOICE_CALL_SYSTEM_PROMPT = """
 不要输出贴纸、表情包、颜文字、ASCII 表情或类似“(≧▽≦)”的符号组合。
 任何 emoji、颜文字、表情包文本都会被系统硬性删除。
 不要把语音标签、表演标签写进正文。
+"""
+
+private const val PROACTIVE_VOICE_CALL_SYSTEM_PROMPT = """
+你可以使用 request_voice_call 工具主动邀请用户进行语音通话。
+只在实时说话明显比继续打字更自然、更有帮助时发起来电，不要频繁使用，也不要为了制造效果而来电。
+调用时给出一句简短、自然的来电理由，不要在正文里假装电话已经接通。
+如果用户接听，立即用一句简短自然的话开始通话，并继续遵守语音通话的简短口语风格。
+如果用户拒接或未接，尊重结果，不要立刻再次发起，也不要责备或施压。
 """
 
 private const val ANONYMOUS_QUESTION_SYSTEM_PROMPT = """
@@ -478,6 +490,21 @@ class ChatService(
         val job = appScope.launch {
             try {
                 val conversation = session.state.value
+                val acceptedVoiceCall = approved && answer == null &&
+                    conversation.messageNodes.any { node ->
+                        node.messages.any { message ->
+                            message.parts.any { part ->
+                                part is UIMessagePart.Tool &&
+                                    part.toolCallId == toolCallId &&
+                                    part.toolName == REQUEST_VOICE_CALL_TOOL_NAME
+                            }
+                        }
+                    }
+                val resumeRequestMode = if (acceptedVoiceCall) {
+                    ChatRequestMode.VoiceCall
+                } else {
+                    ChatRequestMode.Normal
+                }
                 val newApprovalState = when {
                     answer != null -> ToolApprovalState.Answered(answer)
                     approved -> ToolApprovalState.Approved
@@ -514,13 +541,16 @@ class ChatService(
 
                 // Only continue generation when all pending tools are handled
                 if (!hasPendingTools) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(
+                        conversationId = conversationId,
+                        requestMode = resumeRequestMode,
+                    )
                 }
 
                 _generationDoneFlow.emit(
                     GenerationDoneEvent(
                         conversationId = conversationId,
-                        requestMode = ChatRequestMode.Normal,
+                        requestMode = resumeRequestMode,
                     )
                 )
             } catch (e: Exception) {
@@ -573,6 +603,10 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
             val generationMessages = conversation.messagesForGeneration(messageRange)
+            val voiceCallToolEnabled = LocalToolOption.VoiceCall in assistant.localTools &&
+                requestMode == ChatRequestMode.Normal
+            val voiceCallConfigured = settings.getSelectedTTSProvider() != null
+            val proactiveVoiceCallEnabled = requestMode == ChatRequestMode.Normal && voiceCallToolEnabled
             val momentScopeId = conversation.momentScopeId(assistant)
             val anonymousQuestionScopeId = conversation.personaScopeId(assistant)
             val anonymousQuestionContextPrompt = when {
@@ -588,6 +622,7 @@ class ChatService(
 
                 else -> null
             }
+            var voiceCallFailureReported = false
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -603,6 +638,7 @@ class ChatService(
                         ChatRequestMode.Normal -> null
                         ChatRequestMode.VoiceCall -> VOICE_CALL_SYSTEM_PROMPT.trimIndent()
                     },
+                    PROACTIVE_VOICE_CALL_SYSTEM_PROMPT.trimIndent().takeIf { proactiveVoiceCallEnabled },
                     momentContextPrompt,
                     ANONYMOUS_QUESTION_SYSTEM_PROMPT.takeIf {
                         requestMode == ChatRequestMode.Normal && assistant.anonymousQuestionBoxEnabled
@@ -631,6 +667,7 @@ class ChatService(
                         localTools.getTools(
                             options = assistant.localTools,
                             usageLockEnabled = settings.usageReminderConfig.lockEnabled,
+                            voiceCallConfigured = voiceCallConfigured,
                             momentAssistantId = when {
                                 requestMode == ChatRequestMode.Normal && assistant.momentsEnabled -> momentScopeId
                                 else -> null
@@ -691,6 +728,24 @@ class ChatService(
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunkMessages)
                         updateConversation(conversationId, updatedConversation)
+
+                        if (!voiceCallFailureReported && requestMode == ChatRequestMode.Normal && chunkMessages.any { message ->
+                                message.parts.any { part ->
+                                    part is UIMessagePart.Tool &&
+                                        part.toolName == REQUEST_VOICE_CALL_TOOL_NAME &&
+                                        part.output.any { output ->
+                                            output is UIMessagePart.Text &&
+                                                output.text.contains(VOICE_CALL_UNAVAILABLE_MESSAGE)
+                                        }
+                                }
+                            }) {
+                            voiceCallFailureReported = true
+                            addError(
+                                IllegalStateException(VOICE_CALL_UNAVAILABLE_MESSAGE),
+                                conversationId,
+                                title = context.getString(R.string.error_title_voice_call),
+                            )
+                        }
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {

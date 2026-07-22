@@ -80,6 +80,7 @@ import me.rerere.hugeicons.stroke.Voice
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.voice.VOICE_CALL_UNAVAILABLE_MESSAGE
 import me.rerere.rikkahub.service.ChatRequestMode
 import me.rerere.rikkahub.service.sanitizeVoiceCallTextForSpeech
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
@@ -95,6 +96,8 @@ import me.rerere.tts.model.PlaybackStatus
 @Composable
 fun VoiceCallOverlay(
     visible: Boolean,
+    awaitInitialAssistantReply: Boolean = false,
+    initialAssistantMessageId: String? = null,
     conversation: Conversation,
     userAvatar: Avatar,
     userName: String,
@@ -126,7 +129,7 @@ fun VoiceCallOverlay(
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
 
-    var voiceReplyPending by remember { mutableStateOf(false) }
+    var voiceReplyPending by remember { mutableStateOf(awaitInitialAssistantReply) }
     var spokenMessageId by remember { mutableStateOf<String?>(null) }
     var queuedTextLength by remember { mutableStateOf(0) }
     var visibleTextLength by remember { mutableStateOf(0) }
@@ -151,9 +154,20 @@ fun VoiceCallOverlay(
         .drop(callStartMessageCount)
         .filter { it.role == MessageRole.USER || it.role == MessageRole.ASSISTANT }
     val messageListState = rememberLazyListState()
-    val currentAssistantMessage = conversation.currentMessages
-        .drop(voiceRequestStartMessageCount)
-        .lastOrNull { it.role == MessageRole.ASSISTANT }
+    val initialAssistantMessage = initialAssistantMessageId?.let { messageId ->
+        conversation.currentMessages.firstOrNull {
+            it.role == MessageRole.ASSISTANT && it.id.toString() == messageId
+        }
+    }
+    val currentAssistantMessage = if (initialAssistantMessageId != null) {
+        initialAssistantMessage?.takeIf {
+            loadingJob != null || it.toText().isNotBlank()
+        }
+    } else {
+        conversation.currentMessages
+            .drop(voiceRequestStartMessageCount)
+            .lastOrNull { it.role == MessageRole.ASSISTANT }
+    }
     val currentAssistantId = currentAssistantMessage?.id?.toString()
     val currentAssistantText = currentAssistantMessage?.toText().orEmpty()
     val pendingUserInputText = keyboardInput.trim()
@@ -204,6 +218,13 @@ fun VoiceCallOverlay(
         tts.stop()
         voiceReplyPending = false
         onDismiss()
+    }
+
+    LaunchedEffect(visible, ttsAvailable) {
+        if (visible && !ttsAvailable) {
+            toaster.show(VOICE_CALL_UNAVAILABLE_MESSAGE, type = ToastType.Error)
+            hangUp()
+        }
     }
 
     fun canStartInput(): Boolean {
@@ -381,6 +402,13 @@ fun VoiceCallOverlay(
         }
     }
 
+    LaunchedEffect(awaitInitialAssistantReply) {
+        if (awaitInitialAssistantReply) {
+            voiceReplyPending = true
+            resetSpeechProgress(null)
+        }
+    }
+
     LaunchedEffect(
         voiceReplyPending,
         currentAssistantId,
@@ -415,6 +443,7 @@ fun VoiceCallOverlay(
             val segment = queuedSpeechSegments.getOrNull(nextSpeechIndex)
             if (segment == null) {
                 if (latestLoadingJob == null &&
+                    latestCurrentAssistantText.isNotBlank() &&
                     queuedTextLength >= latestCurrentAssistantText.length &&
                     visibleTextLength >= latestCurrentAssistantText.length
                 ) {
@@ -478,8 +507,9 @@ fun VoiceCallOverlay(
     }
 
     LaunchedEffect(ttsError) {
-        ttsError?.takeIf { it.isNotBlank() }?.let {
-            toaster.show(it, type = ToastType.Error)
+        if (visible && ttsError?.isNotBlank() == true) {
+            toaster.show(VOICE_CALL_UNAVAILABLE_MESSAGE, type = ToastType.Error)
+            hangUp()
         }
     }
 
