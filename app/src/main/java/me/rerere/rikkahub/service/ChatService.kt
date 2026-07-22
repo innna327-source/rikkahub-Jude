@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -558,6 +560,78 @@ class ChatService(
             }
         }
 
+        session.setJob(job)
+    }
+
+    fun reportVoiceCallClosed(
+        conversationId: Uuid,
+        toolCallId: String,
+        failureMessage: String? = null,
+    ) {
+        val session = getOrCreateSession(conversationId)
+        val previousJob = session.getJob()
+        previousJob?.cancel()
+
+        val job = appScope.launch {
+            try {
+                runCatching { previousJob?.join() }
+
+                val conversation = session.state.value
+                val target = conversation.messageNodes.mapIndexedNotNull { nodeIndex, node ->
+                    node.messages.mapIndexedNotNull { messageIndex, message ->
+                        messageIndex.takeIf {
+                            message.parts.any { part ->
+                                part is UIMessagePart.Tool &&
+                                    part.toolCallId == toolCallId &&
+                                    part.toolName == REQUEST_VOICE_CALL_TOOL_NAME
+                            }
+                        }?.let { messageIndex -> nodeIndex to messageIndex }
+                    }.firstOrNull()
+                }.firstOrNull() ?: return@launch
+
+                val (targetNodeIndex, targetMessageIndex) = target
+                val result = buildJsonObject {
+                    put("success", failureMessage == null)
+                    put("status", if (failureMessage == null) "ended" else "failed")
+                    if (failureMessage != null) {
+                        put("error", failureMessage)
+                    }
+                }.toString()
+                val updatedNodes = conversation.messageNodes
+                    .take(targetNodeIndex + 1)
+                    .mapIndexed { nodeIndex, node ->
+                        if (nodeIndex != targetNodeIndex) {
+                            node
+                        } else {
+                            node.copy(
+                                messages = node.messages.mapIndexed { messageIndex, message ->
+                                    if (messageIndex != targetMessageIndex) {
+                                        message
+                                    } else {
+                                        message.copy(
+                                            parts = message.parts.map { part ->
+                                                if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) {
+                                                    part.copy(output = listOf(UIMessagePart.Text(result)))
+                                                } else {
+                                                    part
+                                                }
+                                            }
+                                        )
+                                    }
+                                },
+                                selectIndex = targetMessageIndex,
+                            )
+                        }
+                    }
+                saveConversation(
+                    conversationId,
+                    conversation.copy(messageNodes = updatedNodes),
+                )
+                handleMessageComplete(conversationId)
+            } catch (e: Exception) {
+                addError(e, conversationId, title = context.getString(R.string.error_title_voice_call))
+            }
+        }
         session.setJob(job)
     }
 

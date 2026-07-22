@@ -98,6 +98,7 @@ fun VoiceCallOverlay(
     visible: Boolean,
     awaitInitialAssistantReply: Boolean = false,
     initialAssistantMessageId: String? = null,
+    initialVoiceCallToolCallId: String? = null,
     conversation: Conversation,
     userAvatar: Avatar,
     userName: String,
@@ -107,6 +108,7 @@ fun VoiceCallOverlay(
     hasChatModel: Boolean,
     vm: ChatVM,
     onDismiss: () -> Unit,
+    onVoiceCallClosed: (failureMessage: String?) -> Unit = {},
     onMessageSubmitted: () -> Unit,
 ) {
     if (!visible) return
@@ -142,6 +144,7 @@ fun VoiceCallOverlay(
     var submittedKeyboardInputSession by remember { mutableStateOf(0) }
     var keyboardInput by remember { mutableStateOf("") }
     var submittedKeyboardInput by remember { mutableStateOf("") }
+    var voiceCallResultReported by remember(initialVoiceCallToolCallId) { mutableStateOf(false) }
     // Keep this dormant troubleshooting dialog code nearby. It was useful for
     // diagnosing IME voice-input lifecycle issues and may be re-enabled later.
     // var showVoiceCallFlowDialog by remember { mutableStateOf(true) }
@@ -209,7 +212,7 @@ fun VoiceCallOverlay(
         }
     }
 
-    fun hangUp() {
+    fun hangUp(failureMessage: String? = null) {
         keyboardCaptureActive = false
         keyboardInput = ""
         submittedKeyboardInput = ""
@@ -217,13 +220,17 @@ fun VoiceCallOverlay(
         keyboardController?.hide()
         tts.stop()
         voiceReplyPending = false
+        if (initialVoiceCallToolCallId != null && !voiceCallResultReported) {
+            voiceCallResultReported = true
+            onVoiceCallClosed(failureMessage)
+        }
         onDismiss()
     }
 
     LaunchedEffect(visible, ttsAvailable) {
         if (visible && !ttsAvailable) {
             toaster.show(VOICE_CALL_UNAVAILABLE_MESSAGE, type = ToastType.Error)
-            hangUp()
+            hangUp(VOICE_CALL_UNAVAILABLE_MESSAGE)
         }
     }
 
@@ -509,7 +516,7 @@ fun VoiceCallOverlay(
     LaunchedEffect(ttsError) {
         if (visible && ttsError?.isNotBlank() == true) {
             toaster.show(VOICE_CALL_UNAVAILABLE_MESSAGE, type = ToastType.Error)
-            hangUp()
+            hangUp(VOICE_CALL_UNAVAILABLE_MESSAGE)
         }
     }
 

@@ -311,6 +311,10 @@ class ChatVM(
         chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
     }
 
+    fun reportVoiceCallClosed(toolCallId: String, failureMessage: String? = null) {
+        chatService.reportVoiceCallClosed(_conversationId, toolCallId, failureMessage)
+    }
+
     fun stopGeneration() {
         viewModelScope.launch {
             chatService.stopGeneration(_conversationId)

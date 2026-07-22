@@ -68,6 +68,7 @@ class UsageReminderService : Service() {
     private var lockOverlayView: View? = null
     private var lockOverlaySignature: String? = null
     private var lockNoticeJob: Job? = null
+    private var lastLockNotificationSignature: String? = null
     private var lastTargetRedirectPackageName: String? = null
     private var lastTargetRedirectAtMillis: Long = 0L
 
@@ -196,6 +197,7 @@ class UsageReminderService : Service() {
                     "checkUsageRules: active lock target=${activeLock.targetPackageName} " +
                         "label=${activeLock.targetLabel} until=${activeLock.lockedUntilMillis}"
                 )
+                sendLockNotification(activeLock)
                 syncLockOverlay(activeLock)
                 scheduleUnlock(activeLock.lockedUntilMillis)
                 return activeLock.nextCheckDelayMillis()
@@ -286,6 +288,7 @@ class UsageReminderService : Service() {
                     targetPackageName = rule.packageName,
                     targetLabel = rule.label,
                 )
+                sendLockNotification(nextLock)
                 syncLockOverlay(nextLock)
                 scheduleUnlock(nextLock.lockedUntilMillis)
             }
@@ -339,6 +342,7 @@ class UsageReminderService : Service() {
                 "until=$lockedUntilMillis usageAccess=${reader.hasUsageAccess()} " +
                 "overlay=${canDrawOverlays(this)} monitorActive=${monitorJob?.isActive == true}"
         )
+        sendLockNotification(lock)
         syncLockOverlay(lock)
         scheduleUnlock(lock.lockedUntilMillis)
         startMonitoring(restart = true)
@@ -749,6 +753,18 @@ class UsageReminderService : Service() {
     }
 
     private fun sendLockNotification(lock: UsageReminderLock) {
+        val signature = buildString {
+            append(lock.createdAtMillis)
+            append('|')
+            append(lock.lockedUntilMillis)
+            append('|')
+            append(lock.targetPackageName.orEmpty())
+            append('|')
+            append(lock.reason)
+        }
+        if (lastLockNotificationSignature == signature) {
+            return
+        }
         val unlockText = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
             .format(Date(lock.lockedUntilMillis))
         val reasonText = lock.reason.ifBlank { getString(R.string.usage_lock_overlay_title) }
@@ -757,17 +773,22 @@ class UsageReminderService : Service() {
             reasonText,
             unlockText,
         )
-        NotificationManagerCompat.from(this).notify(
-            NOTIFICATION_ID_LOCK,
-            NotificationCompat.Builder(this, USAGE_LIMIT_REMINDER_CHANNEL_ID)
-                .setSmallIcon(R.drawable.small_icon)
-                .setContentTitle(getString(R.string.usage_lock_notification_title))
-                .setContentText(content)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(content))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .build()
-        )
+        runCatching {
+            NotificationManagerCompat.from(this).notify(
+                NOTIFICATION_ID_LOCK,
+                NotificationCompat.Builder(this, USAGE_LIMIT_REMINDER_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.small_icon)
+                    .setContentTitle(getString(R.string.usage_lock_notification_title))
+                    .setContentText(content)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                    .build()
+            )
+            lastLockNotificationSignature = signature
+        }.onFailure {
+            logUsageLock("sendLockNotification: notify failed target=${lock.targetPackageName}", it)
+        }
     }
 
     private suspend fun ignoreToday(packageName: String) {

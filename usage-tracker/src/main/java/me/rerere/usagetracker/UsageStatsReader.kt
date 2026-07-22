@@ -112,26 +112,61 @@ class UsageStatsReader(private val context: Context) {
     suspend fun loadCurrentForegroundPackageName(): String? = withContext(Dispatchers.IO) {
         val usageStatsManager = appContext.getSystemService<UsageStatsManager>() ?: return@withContext null
         val nowMillis = System.currentTimeMillis()
-        val events = usageStatsManager.queryEvents(
-            (nowMillis - FOREGROUND_STATE_LOOKBACK_MILLIS).coerceAtLeast(0L),
-            nowMillis,
-        )
+        val queryStartMillis = (nowMillis - FOREGROUND_STATE_LOOKBACK_MILLIS).coerceAtLeast(0L)
+        usageStatsManager.loadCurrentForegroundPackageFromEvents(queryStartMillis, nowMillis)
+            ?: runCatching {
+                usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    queryStartMillis,
+                    nowMillis,
+                )
+                    .filter { it.lastTimeUsed > 0L }
+                    .maxByOrNull { it.lastTimeUsed }
+                    ?.packageName
+            }.getOrNull()
+    }
+
+    private fun UsageStatsManager.loadCurrentForegroundPackageFromEvents(
+        startMillis: Long,
+        endMillis: Long,
+    ): String? {
+        val events = queryEvents(startMillis, endMillis)
+        val activeComponentsByPackage = mutableMapOf<String, MutableSet<String>>()
+        val latestForegroundStartMillisByPackage = mutableMapOf<String, Long>()
         val event = UsageEvents.Event()
-        val activeStarts = mutableMapOf<String, Long>()
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
             val packageName = event.packageName ?: continue
+            val componentKey = event.foregroundComponentKey(packageName)
             when {
                 event.eventType.isForegroundStartEvent() -> {
-                    activeStarts[packageName] = event.timeStamp
+                    activeComponentsByPackage
+                        .getOrPut(packageName) { mutableSetOf() }
+                        .add(componentKey)
+                    latestForegroundStartMillisByPackage[packageName] = event.timeStamp
                 }
 
                 event.eventType.isForegroundEndEvent() -> {
-                    activeStarts.remove(packageName)
+                    val activeComponents = activeComponentsByPackage[packageName] ?: continue
+                    activeComponents.remove(componentKey)
+                    if (activeComponents.isEmpty()) {
+                        activeComponentsByPackage.remove(packageName)
+                    }
                 }
             }
         }
-        activeStarts.maxByOrNull { it.value }?.key
+        return activeComponentsByPackage.keys
+            .maxByOrNull { latestForegroundStartMillisByPackage[it] ?: Long.MIN_VALUE }
+    }
+
+    private fun UsageEvents.Event.foregroundComponentKey(packageName: String): String {
+        return if (eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+            eventType == UsageEvents.Event.MOVE_TO_BACKGROUND
+        ) {
+            packageName
+        } else {
+            className?.takeIf { it.isNotBlank() } ?: packageName
+        }
     }
 
     private fun PackageManager.loadInstalledApps(): Map<String, String> {

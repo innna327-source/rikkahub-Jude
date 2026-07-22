@@ -267,6 +267,7 @@ private fun ChatPageContent(
     var voiceCallVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var awaitInitialVoiceCallReply by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var initialVoiceCallAssistantMessageId by rememberSaveable(conversation.id) { mutableStateOf<String?>(null) }
+    var initialVoiceCallToolCallId by rememberSaveable(conversation.id) { mutableStateOf<String?>(null) }
     var handledIncomingVoiceCallId by rememberSaveable(conversation.id) { mutableStateOf<String?>(null) }
     var momentsVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var anonymousQuestionBoxVisible by rememberSaveable(conversation.id) { mutableStateOf(false) }
@@ -334,6 +335,7 @@ private fun ChatPageContent(
                     onOpenVoiceCall = {
                         awaitInitialVoiceCallReply = false
                         initialVoiceCallAssistantMessageId = null
+                        initialVoiceCallToolCallId = null
                         voiceCallVisible = true
                     },
                     showMoments = momentsEnabled,
@@ -536,6 +538,7 @@ private fun ChatPageContent(
             visible = voiceCallVisible,
             awaitInitialAssistantReply = awaitInitialVoiceCallReply,
             initialAssistantMessageId = initialVoiceCallAssistantMessageId,
+            initialVoiceCallToolCallId = initialVoiceCallToolCallId,
             conversation = conversation,
             userAvatar = setting.displaySetting.userAvatar,
             userName = setting.displaySetting.userNickname.ifBlank { "我" },
@@ -548,6 +551,12 @@ private fun ChatPageContent(
                 voiceCallVisible = false
                 awaitInitialVoiceCallReply = false
                 initialVoiceCallAssistantMessageId = null
+                initialVoiceCallToolCallId = null
+            },
+            onVoiceCallClosed = { failureMessage ->
+                initialVoiceCallToolCallId?.let { toolCallId ->
+                    vm.reportVoiceCallClosed(toolCallId, failureMessage)
+                }
             },
             onMessageSubmitted = {
                 scope.launch {
@@ -566,6 +575,7 @@ private fun ChatPageContent(
                     handledIncomingVoiceCallId = request.toolCallId
                     awaitInitialVoiceCallReply = true
                     initialVoiceCallAssistantMessageId = request.assistantMessageId
+                    initialVoiceCallToolCallId = request.toolCallId
                     voiceCallVisible = true
                     vm.handleToolApproval(
                         toolCallId = request.toolCallId,
