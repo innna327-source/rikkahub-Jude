@@ -153,24 +153,27 @@ fun VoiceCallOverlay(
     val callStartMessageCount = remember { conversation.currentMessages.size }
     var voiceRequestStartMessageCount by remember { mutableStateOf(conversation.currentMessages.size) }
 
-    val visibleMessages = conversation.currentMessages
-        .drop(callStartMessageCount)
-        .filter { it.role == MessageRole.USER || it.role == MessageRole.ASSISTANT }
-    val messageListState = rememberLazyListState()
     val initialAssistantMessage = initialAssistantMessageId?.let { messageId ->
         conversation.currentMessages.firstOrNull {
             it.role == MessageRole.ASSISTANT && it.id.toString() == messageId
         }
     }
-    val currentAssistantMessage = if (initialAssistantMessageId != null) {
-        initialAssistantMessage?.takeIf {
+    val visibleMessages = conversation.currentMessages
+        .filterIndexed { index, message ->
+            (index >= callStartMessageCount || message.id.toString() == initialAssistantMessageId) &&
+                (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT)
+        }
+    val messageListState = rememberLazyListState()
+    // The incoming-call tool message predates the call's first generated reply.
+    // Prefer each reply created after the current voice input; keep the tool
+    // message only as a fallback while the first reply is still starting.
+    val latestGeneratedAssistantMessage = conversation.currentMessages
+        .drop(voiceRequestStartMessageCount)
+        .lastOrNull { it.role == MessageRole.ASSISTANT }
+    val currentAssistantMessage = latestGeneratedAssistantMessage
+        ?: initialAssistantMessage?.takeIf {
             loadingJob != null || it.toText().isNotBlank()
         }
-    } else {
-        conversation.currentMessages
-            .drop(voiceRequestStartMessageCount)
-            .lastOrNull { it.role == MessageRole.ASSISTANT }
-    }
     val currentAssistantId = currentAssistantMessage?.id?.toString()
     val currentAssistantText = currentAssistantMessage?.toText().orEmpty()
     val pendingUserInputText = keyboardInput.trim()
